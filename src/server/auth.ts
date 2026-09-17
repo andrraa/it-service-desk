@@ -1,3 +1,5 @@
+import type { SQL } from 'bun';
+
 export interface User {
   id: string;
   nik: string;
@@ -10,6 +12,11 @@ export interface User {
 
 export interface RegisterInput {
   nik: string;
+  username: string;
+  password: string;
+}
+
+export interface LoginInput {
   username: string;
   password: string;
 }
@@ -55,6 +62,36 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
   };
 }
 
+export function validateLoginInput(input: unknown): { valid: true; data: LoginInput } | { valid: false; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+
+  if (typeof input !== 'object' || input === null) {
+    return { valid: false, errors: { _form: 'Payload tidak valid.' } };
+  }
+
+  const { username, password } = input as Record<string, unknown>;
+
+  if (typeof username !== 'string' || username.trim() === '') {
+    errors.username = 'Username wajib diisi.';
+  }
+
+  if (typeof password !== 'string' || password === '') {
+    errors.password = 'Password wajib diisi.';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    data: {
+      username: (username as string).trim(),
+      password: password as string,
+    },
+  };
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return await Bun.password.hash(password, {
     algorithm: 'argon2id',
@@ -65,4 +102,70 @@ export async function hashPassword(password: string): Promise<string> {
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   return await Bun.password.verify(password, hash);
+}
+
+export function generateSessionId(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function parseCookies(header: string | null): Record<string, string> {
+  if (!header) return {};
+  const cookies: Record<string, string> = {};
+  for (const pair of header.split(';')) {
+    const [name, ...rest] = pair.trim().split('=');
+    if (name && rest.length > 0) {
+      cookies[name] = decodeURIComponent(rest.join('='));
+    }
+  }
+  return cookies;
+}
+
+export function buildSessionCookie(token: string, maxAgeSeconds: number = 7 * 24 * 3600): string {
+  const parts = [
+    `session_id=${token}`,
+    `Path=/`,
+    `Max-Age=${maxAgeSeconds}`,
+    `HttpOnly`,
+    `SameSite=Lax`,
+  ];
+  if (process.env.NODE_ENV === 'production') {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
+}
+
+export function buildClearSessionCookie(): string {
+  return 'session_id=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax';
+}
+
+export async function getSessionUser(sql: SQL, token: string): Promise<User | null> {
+  const rows = await sql`
+    SELECT 
+      u.id, 
+      u.nik, 
+      u.username, 
+      u.role, 
+      u.is_active AS "isActive", 
+      u.must_change_password AS "mustChangePassword", 
+      u.created_at AS "createdAt",
+      s.expires_at AS "sessionExpiresAt"
+    FROM sessions s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.id = ${token} AND s.expires_at > NOW() AND u.is_active = TRUE
+    LIMIT 1
+  `;
+
+  if (rows.length === 0) return null;
+  const row = rows[0] as User;
+  return {
+    id: String(row.id),
+    nik: row.nik,
+    username: row.username,
+    role: row.role,
+    isActive: row.isActive,
+    mustChangePassword: row.mustChangePassword,
+    createdAt: row.createdAt,
+  };
 }
