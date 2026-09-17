@@ -212,7 +212,7 @@ Breadcrumb hanya pada hierarki nyata dan clickable, misalnya `Tiket Saya / TKT-0
 ### Form
 
 - Label selalu terlihat; placeholder bukan pengganti label.
-- Input/select/file picker native dahulu. Tidak perlu custom dropdown atau rich-text editor.
+- Input dan select memakai kontrol native. **File upload wajib memakai tampilan custom**; elemen `<input type="file">` native tetap tersedia secara visually hidden sebagai mekanisme pemilih file, bukan ditampilkan dengan style bawaan browser. Tidak perlu custom dropdown atau rich-text editor.
 - Error tampil di dekat field dengan `aria-invalid` dan `aria-describedby`; fokus ke field gagal pertama setelah submit.
 - Draft, pilihan file yang masih tersedia, dan isi field dipertahankan saat request gagal. Jika file perlu dipilih ulang, jelaskan secara eksplisit.
 - Tampilkan ketentuan password dan lampiran sesuai validasi backend. Batas PRD yang masih usulan tidak boleh dianggap konfigurasi final tanpa sinkronisasi.
@@ -246,6 +246,20 @@ Breadcrumb hanya pada hierarki nyata dan clickable, misalnya `Tiket Saya / TKT-0
 - Reset password dan penonaktifan akun: tampilkan akun sasaran, dampak pencabutan sesi, dan konfirmasi eksplisit.
 - Password sementara hanya tampil sekali sesuai kebijakan produk; jangan simpan di localStorage, toast, atau log.
 
+### File upload
+
+- Jangan menampilkan UI bawaan browser seperti “Choose Files” atau “No file chosen”.
+- Gunakan `<label>` atau `<button>` custom berlabel **“Pilih Berkas”** yang mengaktifkan `<input type="file">` visually hidden.
+- Area upload memuat ikon sederhana, label aksi, dan helper text: format, batas ukuran per file, serta jumlah maksimum.
+- Drag-and-drop boleh tersedia pada desktop sebagai jalur tambahan, bukan satu-satunya cara. Seluruh area dropzone dapat diklik dan dioperasikan dengan keyboard.
+- State drag aktif memakai perubahan border/background ringan; jangan memakai animasi dekoratif.
+- Setelah dipilih, tampilkan daftar file di luar input: nama lengkap yang dapat wrap, ukuran, status upload, error per file, dan tombol **Hapus** berlabel aksesibel.
+- Gambar boleh memiliki thumbnail kecil; PDF cukup ikon dokumen. Jangan membuat preview besar sebelum pengguna memintanya.
+- File invalid ditolak dengan alasan spesifik tanpa menghapus file valid lainnya.
+- Saat upload gagal, pertahankan daftar file dan sediakan **Coba Lagi**. Saat upload berlangsung, cegah submit ganda tetapi jangan menyembunyikan nama file.
+- Pada mobile, dropzone selebar container, target sentuh minimal 44 px, daftar file satu kolom, dan tombol hapus tidak bergantung pada hover.
+- Fokus keyboard pada kontrol custom harus terlihat. Input visually hidden tidak boleh memakai `display: none` jika itu menghilangkan akses keyboard/assistive technology; gunakan pola `.sr-only`.
+
 ### Percakapan dan lampiran
 
 - Utamakan daftar pesan kronologis dengan pemisah ringan, bukan bubble warna-warni.
@@ -263,7 +277,7 @@ Breadcrumb hanya pada hierarki nyata dan clickable, misalnya `Tiket Saya / TKT-0
 |---|---|---|
 | Masuk / Daftar | Brand sederhana, form, error, tautan pindah form, tema; petunjuk lupa password ketika tersedia | Sidebar, hero ilustrasi, status database, statistik |
 | Tiket Saya | Jika ada data: pencarian, filter status/prioritas, daftar, CTA Buat Tiket, pagination. Jika kosong: judul, empty state singkat, satu CTA | Welcome banner, filter kosong, dua CTA identik, ringkasan angka pribadi yang menduplikasi daftar |
-| Buat Tiket | H1 “Buat Tiket”, satu kalimat petunjuk, judul, deskripsi, prioritas dengan panduan, lampiran opsional, kirim/batal | Eyebrow “Formulir Pengaduan”, badge status awal, card pembungkus besar, nomor/status editable, wizard multi-step |
+| Buat Tiket | H1 “Buat Tiket”, satu kalimat petunjuk, judul, deskripsi, prioritas dengan panduan, custom file upload, kirim/batal | File input bawaan browser, eyebrow “Formulir Pengaduan”, badge status awal, card pembungkus besar, nomor/status editable, wizard multi-step |
 | Antrean IT | Empat ringkasan PRD, pencarian nomor/judul, filter status/prioritas/penanggung jawab, belum diambil/ditangani sendiri, antrean | Grafik tren, leaderboard, SLA countdown, aktivitas palsu |
 | Detail Tiket | Nomor/judul, prioritas/status, deskripsi, pelapor, waktu/usia, penanggung jawab, lampiran, percakapan, aksi berizin | Pengulangan judul di banyak panel, seluruh metadata dalam card masing-masing |
 | Detail Closed | Solusi, penutup dan waktu penutupan, laporan awal, percakapan/lampiran read-only | Composer disabled besar, tombol reopen/hapus |
@@ -349,6 +363,7 @@ Daftar berikut adalah hasil audit browser dan instruksi wajib perubahan UI berik
 | Dua CTA pada empty state dan page header | Pertahankan satu CTA di empty state | Satu aksi utama per konteks |
 | Eyebrow “FORMULIR PENGADUAN” dan badge “Status awal: Open” | Hapus | Judul sudah menjelaskan konteks; status adalah hasil sistem |
 | Card besar pembungkus seluruh form | Gunakan area form datar maksimal 720 px | Form tidak membutuhkan panel di dalam main surface |
+| File input bawaan browser | Ganti visual dengan kontrol “Pilih Berkas” custom + daftar file | Konsisten lintas browser dan lebih mudah memahami state upload |
 
 **Jangan dibuang:** empat ringkasan wajib IT, panduan prioritas, usia tiket, solusi, histori, identitas pengirim, error, konfirmasi penting, toggle tema, skip link, dan informasi aksesibilitas. Jangan tampilkan menu fitur yang belum diimplementasikan sebagai tombol kosong atau “coming soon”.
 
@@ -372,6 +387,8 @@ Urutan kerja:
 - [ ] Elemen pada tabel pengurangan UI telah dibuang/disederhanakan tanpa menghilangkan fungsi wajib.
 - [ ] Daftar kosong tidak menampilkan search/filter dan hanya memiliki satu CTA Buat Tiket.
 - [ ] Form Buat Tiket tidak memiliki eyebrow, badge status awal, atau card pembungkus besar.
+- [ ] UI bawaan `<input type="file">` tidak terlihat; kontrol custom dapat dipakai dengan mouse, sentuhan, dan keyboard.
+- [ ] Custom upload menampilkan format/batas, daftar file, ukuran, hapus, progress/error, serta retry tanpa kehilangan pilihan valid.
 - [ ] Light/Dark konsisten, tanpa flash tema salah, preferensi bertahan setelah reload, storage gagal tidak memblokir toggle.
 - [ ] Radius komponen hanya 0/4/8/12 px sesuai fungsi; tidak ada pill/dekorasi berlebihan.
 - [ ] Tampilan diuji pada lebar 360, 390, 768, 1024, dan 1440 px serta reflow 320 CSS px; tidak ada horizontal overflow halaman.
