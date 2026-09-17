@@ -3,7 +3,7 @@
 Aplikasi internal berbasis web untuk pelaporan kendala, manajemen tiket, antrean operasional IT Staff (FIFO per urgensi prioritas), ruang percakapan & lampiran privat, serta pemulihan akses pengguna.
 
 Spesifikasi Produk: [PRD.md](PRD.md)  
-Panduan Operasional & Backup: [docs/operations.md](docs/operations.md)  
+Panduan Operasional & Docker: [docs/operations.md](docs/operations.md)  
 Checklist Kesiapan Rilis: [tests/release-checklist.md](tests/release-checklist.md)  
 Laporan Verifikasi E2E: [tests/e2e.md](tests/e2e.md)
 
@@ -36,7 +36,7 @@ Laporan Verifikasi E2E: [tests/e2e.md](tests/e2e.md)
    - Proteksi penonaktifan Super Admin aktif terakhir.
 7. **Antarmuka & Tema Visual:**
    - Gaya corporate, radius 8–12 px, fokus keyboard aksesibel.
-   - Toggle Light Mode dan Dark Mode dengan penyimpanan preferensi browser.
+   - Toggle Light Mode dan Dark Mode dengan penyimpanan preferensi di local storage browser.
 
 ---
 
@@ -45,42 +45,45 @@ Laporan Verifikasi E2E: [tests/e2e.md](tests/e2e.md)
 - **Runtime & Backend:** Bun 1.4.2 (HTTP Server bawaan Bun + Bun SQL)
 - **Frontend:** Svelte 5 + TypeScript + Vite
 - **Database:** PostgreSQL 16
+- **Containerization:** Docker & Docker Compose (Multi-stage production & dev setup)
 - **Hashing:** Argon2id (bawaan `Bun.password`)
 
 ---
 
-## 3. Menjalankan Aplikasi Secara Lokal
+## 3. Menjalankan Menggunakan Docker
 
-### A. Persiapan Lingkungan
-Salin file konfigurasi dan isi kredensial PostgreSQL:
+### A. Lingkungan Development (`docker-dev`)
 ```bash
-cp .env.example .env
+# Jalankan container dev (Hot reload aktif pada port 3000 & 5173)
+docker compose -f docker-compose.dev.yml up --build -d
 ```
 
-### B. Migrasi Database & Bootstrap Super Admin
+### B. Lingkungan Production (`docker-production`)
 ```bash
-bun run src/server/migrate.ts
+# 1. Jalankan container production (Build multi-stage + migrasi database otomatis di port 3000)
+docker compose -f docker-compose.prod.yml up --build -d
 
-# Bootstrap Super Admin pertama (opsional)
-export ADMIN_NIK="000001"
-export ADMIN_USERNAME="superadmin"
-export ADMIN_PASSWORD="SuperPasswordAman123!"
-bun run scripts/bootstrap-admin.ts
-```
-
-### C. Menjalankan Server & Frontend
-```bash
-# Terminal 1 (Backend API)
-bun run dev:api
-
-# Terminal 2 (Frontend Vite Dev Server)
-bun run dev:web
-# Buka http://localhost:5173 di browser
+# 2. Bootstrap akun Super Admin pertama:
+docker compose -f docker-compose.prod.yml exec -e ADMIN_NIK="000001" -e ADMIN_USERNAME="superadmin" -e ADMIN_PASSWORD="SuperPasswordAman123!" app bun run scripts/bootstrap-admin.ts
 ```
 
 ---
 
-## 4. Pengujian & Verifikasi Kualitas
+## 4. Menjalankan Secara Lokal (Non-Docker)
+
+```bash
+# 1. Salin konfigurasi env & jalankan migrasi
+cp .env.example .env
+bun run src/server/migrate.ts
+
+# 2. Jalankan Backend & Frontend
+bun run dev:api    # Terminal 1: Backend API (port 3000)
+bun run dev:web    # Terminal 2: Frontend Vite (port 5173)
+```
+
+---
+
+## 5. Pengujian & Verifikasi Kualitas
 
 ```bash
 # Jalankan Typecheck TypeScript Strict

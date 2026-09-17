@@ -1,93 +1,84 @@
-# Panduan Operasional — IT Service Desk
+# Panduan Operasional & Deployment Docker — IT Service Desk
 
-Dokumen ini menjelaskan tata cara deployment produksi, backup & restore database serta file lampiran privat, pemantauan log aman, dan prosedur darurat pemulihan Super Admin.
-
----
-
-## 1. Persyaratan Lingkungan (Production Requirements)
-
-- **Runtime:** Bun >= 1.4.2
-- **Database:** PostgreSQL >= 16
-- **Reverse Proxy:** Nginx / Caddy dengan HTTPS (TLS termination wajib di production agar cookie `Secure` aktif)
-- **Direktori Privat Lampiran:** Lokasi penyimpanan persisten (misal: `/var/data/it-service-desk/uploads`) dengan izin akses terbatas (`chmod 700`).
+Dokumen ini menjelaskan tata cara deployment container (`docker-dev` dan `docker-production`), backup & restore volume data, pemantauan log, dan prosedur darurat pemulihan Super Admin.
 
 ---
 
-## 2. Konfigurasi Lingkungan (`.env`)
+## 1. Deployment Menggunakan Docker
 
-```env
-# Database URL lengkap
-DATABASE_URL=postgresql://it_service_desk:PASSWORD_RAHASIA@127.0.0.1:5432/it_service_desk
+Proyek ini telah dikonfigurasi dengan dua lingkungan container terisolasi:
 
-# Port HTTP server internal (bind ke 127.0.0.1)
-PORT=3000
+### A. Environment Development (`docker-dev`)
+Fitur:
+- Hot reload kode sumber lokal melalui volume bind mount.
+- Port API `3000` dan port frontend Vite dev server `5173`.
+- PostgreSQL dev database otomatis di container terpisah (`port host 5433` untuk mencegah tabrakan port host `5432`).
 
-# Mode production mengaktifkan flag Secure pada session cookie
-NODE_ENV=production
-
-# Direktori persisten penyimpanan lampiran privat
-UPLOADS_DIR=/var/data/it-service-desk/uploads
-```
-
----
-
-## 3. Langkah Deployment & Migrasi Database
-
-1. **Jalankan Migrasi Database:**
-   ```bash
-   bun run src/server/migrate.ts
-   ```
-2. **Build Bundling Frontend & Server:**
-   ```bash
-   bun run build
-   ```
-3. **Jalankan Service:**
-   ```bash
-   bun start
-   ```
-
----
-
-## 4. Prosedur Backup & Restore
-
-### A. Backup Database (PostgreSQL)
-Jalankan perintah `pg_dump` terjadwal (misal via cron harian):
+**Cara Menjalankan:**
 ```bash
-pg_dump -U it_service_desk -d it_service_desk -Fc -f "/var/backups/db/it_service_desk_$(date +%Y%m%d_%H%M%S).dump"
-```
+# Build dan jalankan container development di background
+docker compose -f docker-compose.dev.yml up --build -d
 
-### B. Restore Database
-```bash
-pg_restore -U it_service_desk -d it_service_desk --clean --if-exists "/var/backups/db/it_service_desk_YYYYMMDD.dump"
-```
+# Memeriksa log aplikasi
+docker compose -f docker-compose.dev.yml logs -f app
 
-### C. Backup File Lampiran
-Karena lampiran disimpan di direktori privat persisten `UPLOADS_DIR`, backup direktori secara sinkron:
-```bash
-tar -czf "/var/backups/files/uploads_$(date +%Y%m%d_%H%M%S).tar.gz" -C /var/data/it-service-desk uploads
+# Menjalankan migrasi secara manual di dalam container (jika diperlukan)
+docker compose -f docker-compose.dev.yml exec app bun run src/server/migrate.ts
+
+# Menghentikan container development
+docker compose -f docker-compose.dev.yml down
 ```
 
 ---
 
-## 5. Keamanan Log & Kredensial
+### B. Environment Production (`docker-production`)
+Fitur:
+- Multi-stage build (`Dockerfile` / `Dockerfile.prod`):
+  - Stage 1 (`builder`): Mengompilasi frontend Svelte ke `dist/web` dan backend Bun ke `dist/server`.
+  - Stage 2 (`runner`): Menggunakan image ringan `oven/bun:1.4.2-slim` dengan file dist dan dependensi runtime yang dibutuhkan saja.
+- Otomatis menjalankan migrasi database (`src/server/migrate.ts`) sebelum HTTP server dimulai.
+- Static file serving bawaan Bun untuk seluruh aset web frontend di port `3000`.
+- Volume persisten untuk database PostgreSQL (`pg_data`) dan berkas lampiran privat (`uploads_data`).
 
-- Seluruh endpoint API tidak pernah mencetak password, password hash, token sesi, atau isi berkas ke log terminal / stdout.
-- Error database yang memuat string koneksi internal di-sanitize menjadi error code generic (`INTERNAL_ERROR` / `SERVICE_UNAVAILABLE`).
+**Cara Menjalankan:**
+```bash
+# 1. Jalankan container production
+docker compose -f docker-compose.prod.yml up --build -d
+
+# 2. Bootstrap akun Super Admin pertama di dalam container production:
+docker compose -f docker-compose.prod.yml exec -e ADMIN_NIK="000001" -e ADMIN_USERNAME="superadmin" -e ADMIN_PASSWORD="SuperPasswordAman123!" app bun run scripts/bootstrap-admin.ts
+
+# 3. Memeriksa status service
+docker compose -f docker-compose.prod.yml ps
+
+# 4. Menghentikan container production
+docker compose -f docker-compose.prod.yml down
+```
 
 ---
 
-## 6. Prosedur Darurat: Pemulihan Akun Super Admin
+## 2. Prosedur Backup & Restore Data Container
 
-Jika semua Super Admin kehilangan akses atau kredensial terkunci:
-1. Akses server host melalui SSH.
-2. Siapkan kredensial admin baru di environment terminal:
-   ```bash
-   export ADMIN_NIK="EMERGENCY_ADM_01"
-   export ADMIN_USERNAME="emergency_admin"
-   export ADMIN_PASSWORD="PasswordSangatKuatDanPanjang2026!"
-   ```
-3. Eksekusi script bootstrap:
-   ```bash
-   bun run scripts/bootstrap-admin.ts
-   ```
-4. Masuk ke aplikasi menggunakan akun darurat tersebut dan atur ulang akun admin lainnya melalui menu **Kelola Staf & Akun**.
+### A. Backup Database PostgreSQL dari Container
+```bash
+docker exec -t it_service_desk_prod_db pg_dump -U it_service_desk -d it_service_desk -Fc > backup_db_$(date +%Y%m%d_%H%M%S).dump
+```
+
+### B. Restore Database ke Container
+```bash
+docker exec -i it_service_desk_prod_db pg_restore -U it_service_desk -d it_service_desk --clean --if-exists < backup_db_YYYYMMDD.dump
+```
+
+### C. Backup Volume Lampiran Privat
+```bash
+docker run --rm -v it-service-desk_uploads_data:/volume -v $(pwd):/backup alpine tar -czf /backup/backup_uploads_$(date +%Y%m%d_%H%M%S).tar.gz -C /volume .
+```
+
+---
+
+## 3. Keamanan Log & Hardening Produksi
+
+- Container berjalan di jaringan internal bridge tertutup.
+- Port database `5432` pada production compose tidak terekspos ke internet publik (hanya dapat diakses oleh container `app`).
+- Endpoint API menyertakan header keamanan: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, dan `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
+- Di belakang reverse proxy HTTPS (Nginx/Caddy), pastikan melewatkan header `X-Forwarded-Proto: https` dan `X-Forwarded-For`.

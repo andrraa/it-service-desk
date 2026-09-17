@@ -1212,7 +1212,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
   // Single Ticket Detail: /api/tickets/:id
   const ticketDetailMatch = pathname.match(/^\/api\/tickets\/([^/]+)$/);
   if (ticketDetailMatch) {
-    const ticketIdOrNumber = ticketDetailMatch[1];
+    const ticketIdOrNumber = ticketDetailMatch[1]!;
     const user = await getAuthUser();
     if (!user) {
       return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
@@ -1582,6 +1582,26 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     } catch (err) {
       console.error('Reset password error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mereset password pengguna.' } }, 500);
+    }
+  }
+
+  // Static Frontend Assets Serving for Production
+  if (request.method === 'GET' && !pathname.startsWith('/api')) {
+    const webDistDir = join(process.cwd(), 'dist', 'web');
+    const safeSubPath = pathname.replace(/^(\.\.[\/\\])+/, '');
+    const filePath = join(webDistDir, safeSubPath === '/' ? 'index.html' : safeSubPath);
+
+    const file = Bun.file(filePath);
+    if (await file.exists()) {
+      return new Response(file);
+    }
+
+    // SPA fallback to index.html for client-side routing
+    const indexFile = Bun.file(join(webDistDir, 'index.html'));
+    if (await indexFile.exists()) {
+      return new Response(indexFile, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
     }
   }
 

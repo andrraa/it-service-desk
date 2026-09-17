@@ -1,0 +1,39 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: it_service_desk_prod
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://it_service_desk:${POSTGRES_PASSWORD:-it_service_desk_prod_pass}@postgres:5432/it_service_desk
+      - PORT=3000
+      - UPLOADS_DIR=/app/storage/uploads
+    volumes:
+      - uploads_data:/app/storage/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: it_service_desk_prod_db
+    restart: always
+    environment:
+      POSTGRES_USER: it_service_desk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-it_service_desk_prod_pass}
+      POSTGRES_DB: it_service_desk
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U it_service_desk -d it_service_desk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+  uploads_data:
