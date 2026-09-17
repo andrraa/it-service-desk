@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: it_service_desk_dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://it_service_desk:it_service_desk_dev_pass@postgres:5432/it_service_desk
+      - PORT=3000
+      - UPLOADS_DIR=/app/storage/uploads
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - uploads_dev_data:/app/storage/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: it_service_desk_dev_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: it_service_desk
+      POSTGRES_PASSWORD: it_service_desk_dev_pass
+      POSTGRES_DB: it_service_desk
+    ports:
+      - "5433:5432" # exposed on 5433 to avoid collision with existing host container port 5432
+    volumes:
+      - pg_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U it_service_desk -d it_service_desk"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_dev_data:
+  uploads_dev_data:
