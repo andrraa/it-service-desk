@@ -79,7 +79,7 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `migrations/006_attachments.sql`, `src/server/attachments.ts`, `tests/attachments.integration.ts`.
 
 ## 9b. Lampiran tiket dan percakapan
-- [ ] Hubungkan upload ke form tiket/pesan, preview dan download.
+- [x] Hubungkan upload ke form tiket/pesan, preview dan download.
 - Acceptance: pesan lampiran saja valid; maksimal lima file 10 MB sesuai PRD; kegagalan terlihat, tidak ada lampiran hilang diam-diam.
 - Verifikasi: browser create ticket/upload/chat attachment, invalid upload, akses Closed, failure recovery.
 - Dependensi: 9a.

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Conversation from './Conversation.svelte';
+  import Attachments from './Attachments.svelte';
   import type { Ticket } from '../server/tickets';
   import type { User } from '../server/auth';
 
@@ -13,6 +14,7 @@
   let { ticketId, currentUser, onBack }: Props = $props();
 
   let ticket = $state<Ticket | null>(null);
+  let ticketAttachments = $state<any[]>([]);
   let isLoading = $state(true);
   let errorMessage = $state('');
 
@@ -20,14 +22,25 @@
     isLoading = true;
     errorMessage = '';
     try {
-      const res = await fetch(`/api/tickets/${ticketId}`);
-      if (!res.ok) {
-        if (res.status === 403) throw new Error('Anda tidak berhak melihat tiket ini.');
-        if (res.status === 404) throw new Error('Tiket tidak ditemukan.');
+      const [resTicket, resAtt] = await Promise.all([
+        fetch(`/api/tickets/${ticketId}`),
+        fetch(`/api/tickets/${ticketId}/attachments`),
+      ]);
+
+      if (!resTicket.ok) {
+        if (resTicket.status === 403) throw new Error('Anda tidak berhak melihat tiket ini.');
+        if (resTicket.status === 404) throw new Error('Tiket tidak ditemukan.');
         throw new Error('Gagal memuat detail tiket.');
       }
-      const data: any = await res.json();
-      ticket = data.ticket;
+
+      const dataTicket: any = await resTicket.json();
+      ticket = dataTicket.ticket;
+
+      if (resAtt.ok) {
+        const dataAtt: any = await resAtt.json();
+        // Filter only initial ticket attachments (message_id is null)
+        ticketAttachments = (dataAtt.attachments || []).filter((a: any) => !a.messageId);
+      }
     } catch (err: any) {
       errorMessage = err.message || 'Terjadi kesalahan sistem.';
     } finally {
@@ -95,6 +108,12 @@
     <div class="ticket-content-card">
       <h3>Deskripsi Masalah</h3>
       <p class="description-text">{ticket.description}</p>
+
+      {#if ticketAttachments.length > 0}
+        <div style="margin-top: 16px;">
+          <Attachments attachments={ticketAttachments} />
+        </div>
+      {/if}
     </div>
 
     <!-- Live Conversation & Polling -->
@@ -117,7 +136,7 @@
     display: flex;
   }
 
-  .ticket-header-card, .ticket-content-card, .ticket-chat-placeholder {
+  .ticket-header-card, .ticket-content-card {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);

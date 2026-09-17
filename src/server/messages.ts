@@ -6,9 +6,15 @@ export interface TicketMessage {
   senderRole: string;
   messageText: string;
   createdAt: string;
+  attachments?: {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    fileSize: number;
+  }[];
 }
 
-export function validateMessageInput(input: unknown): { valid: true; data: { messageText: string } } | { valid: false; errors: Record<string, string> } {
+export function validateMessageInput(input: unknown, hasAttachments = false): { valid: true; data: { messageText: string } } | { valid: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
   if (typeof input !== 'object' || input === null) {
@@ -17,9 +23,10 @@ export function validateMessageInput(input: unknown): { valid: true; data: { mes
 
   const { messageText } = input as Record<string, unknown>;
 
-  if (typeof messageText !== 'string' || messageText.trim() === '') {
+  // PRD: Pesan dapat berisi teks, lampiran, atau keduanya; pesan kosong tanpa lampiran ditolak
+  if ((typeof messageText !== 'string' || messageText.trim() === '') && !hasAttachments) {
     errors.messageText = 'Pesan tidak boleh kosong.';
-  } else if (messageText.trim().length > 4000) {
+  } else if (typeof messageText === 'string' && messageText.trim().length > 4000) {
     errors.messageText = 'Pesan terlalu panjang (maksimal 4000 karakter).';
   }
 
@@ -30,7 +37,7 @@ export function validateMessageInput(input: unknown): { valid: true; data: { mes
   return {
     valid: true,
     data: {
-      messageText: (messageText as string).trim(),
+      messageText: typeof messageText === 'string' ? messageText.trim() : '',
     },
   };
 }

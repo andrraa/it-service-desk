@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Attachments from './Attachments.svelte';
   import type { TicketMessage } from '../server/messages';
   import type { User } from '../server/auth';
 
@@ -14,11 +15,38 @@
   let messages = $state<TicketMessage[]>([]);
   let newMessage = $state('');
   let draftBackup = $state('');
+  let selectedFiles = $state<File[]>([]);
   let isSending = $state(false);
   let errorMessage = $state('');
   let sendError = $state('');
 
   let pollingInterval: any = null;
+
+  function handleChatFiles(e: Event) {
+    const target = e.target as HTMLInputElement;
+    if (!target.files) return;
+    const filesArray = Array.from(target.files);
+
+    if (filesArray.length + selectedFiles.length > 5) {
+      sendError = 'Maksimal 5 berkas per pesan.';
+      return;
+    }
+
+    for (const f of filesArray) {
+      if (f.size > 10 * 1024 * 1024) {
+        sendError = `Berkas '${f.name}' melebihi 10 MB.`;
+        return;
+      }
+    }
+
+    selectedFiles = [...selectedFiles, ...filesArray];
+    sendError = '';
+    target.value = '';
+  }
+
+  function removeChatFile(index: number) {
+    selectedFiles = selectedFiles.filter((_, i) => i !== index);
+  }
 
   async function fetchMessages(silent = false) {
     if (!silent) errorMessage = '';
@@ -38,33 +66,56 @@
   async function handleSendMessage(e: Event) {
     e.preventDefault();
     const textToSend = newMessage.trim();
-    if (!textToSend) return;
+    if (!textToSend && selectedFiles.length === 0) return;
 
     isSending = true;
     sendError = '';
-    draftBackup = newMessage; // Retain draft in case of failure
+    draftBackup = newMessage;
 
     try {
+      // 1. Post text message (or placeholder if only attachments)
       const res = await fetch(`/api/tickets/${ticketId}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Requested-With': 'fetch',
         },
-        body: JSON.stringify({ messageText: textToSend }),
+        body: JSON.stringify({ messageText: textToSend || '(Lampiran dikirim)' }),
       });
 
       const data: any = await res.json();
 
       if (!res.ok) {
         sendError = data.error?.message || 'Gagal mengirim pesan.';
-        // Keep draft preserved in textarea
         return;
       }
 
-      // Success: clear input & draft
+      const createdMsg = data.data;
+
+      // 2. Upload attachments associated with this message
+      if (selectedFiles.length > 0) {
+        const formData = new FormData();
+        formData.append('messageId', createdMsg.id);
+        for (const file of selectedFiles) {
+          formData.append('files', file);
+        }
+
+        const uploadRes = await fetch(`/api/tickets/${ticketId}/attachments`, {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'fetch' },
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const uploadData: any = await uploadRes.json();
+          sendError = `Pesan terkirim, tetapi lampiran gagal: ${uploadData.error?.message || 'Kesalahan upload'}`;
+        }
+      }
+
+      // Reset
       newMessage = '';
       draftBackup = '';
+      selectedFiles = [];
       await fetchMessages(true);
     } catch {
       sendError = 'Koneksi terputus saat mengirim pesan. Draft Anda tetap tersimpan.';
@@ -75,7 +126,6 @@
 
   onMount(() => {
     void fetchMessages();
-    // Auto-polling target PRD: <= 5 seconds on active tickets
     if (ticketStatus !== 'Closed') {
       pollingInterval = setInterval(() => {
         void fetchMessages(true);
@@ -125,6 +175,10 @@
           <div class="message-body">
             {msg.messageText}
           </div>
+
+          {#if msg.attachments && msg.attachments.length > 0}
+            <Attachments attachments={msg.attachments} />
+          {/if}
         </div>
       {/each}
     {/if}
@@ -146,19 +200,42 @@
     {/if}
 
     <form onsubmit={handleSendMessage} class="message-form">
+      {#if selectedFiles.length > 0}
+        <div class="chips-row">
+          {#each selectedFiles as f, idx}
+            <span class="file-chip">
+              {f.name} ({(f.size / 1024).toFixed(0)} KB)
+              <button type="button" class="btn-del-chip" onclick={() => removeChatFile(idx)}>&times;</button>
+            </span>
+          {/each}
+        </div>
+      {/if}
+
       <div class="input-row">
+        <label class="btn-attach" title="Lampirkan berkas (gambar/PDF)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+          </svg>
+          <input
+            type="file"
+            multiple
+            accept=".jpg,.jpeg,.png,.webp,.pdf"
+            onchange={handleChatFiles}
+            disabled={isSending || selectedFiles.length >= 5}
+            style="display: none;"
+          />
+        </label>
         <textarea
           rows="2"
           bind:value={newMessage}
           placeholder="Tulis pesan atau tanggapan kendala…"
           disabled={isSending}
-          required
         ></textarea>
-        <button type="submit" class="btn btn-primary" disabled={isSending || !newMessage.trim()}>
+        <button type="submit" class="btn btn-primary" disabled={isSending || (!newMessage.trim() && selectedFiles.length === 0)}>
           {isSending ? 'Mengirim…' : 'Kirim'}
         </button>
       </div>
-      <span class="field-hint">Pesan baru akan langsung muncul di sisi tim IT tanpa perlu refresh.</span>
+      <span class="field-hint">Maksimal 5 berkas per pesan (JPG, PNG, WebP, PDF hingga 10 MB).</span>
     </form>
   {/if}
 </div>
@@ -296,15 +373,60 @@
   .message-form {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     border-top: 1px solid var(--color-border);
     padding-top: 14px;
   }
 
+  .chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.75rem;
+  }
+
+  .btn-del-chip {
+    background: none;
+    border: none;
+    color: var(--color-danger);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0 2px;
+  }
+
   .input-row {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: flex-end;
+  }
+
+  .btn-attach {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .btn-attach:hover {
+    color: var(--color-primary);
+    background-color: var(--color-surface);
   }
 
   textarea {

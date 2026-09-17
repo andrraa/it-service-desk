@@ -11,10 +11,37 @@
   let title = $state('');
   let description = $state('');
   let priority = $state<TicketPriority>('Medium');
+  let selectedFiles = $state<File[]>([]);
 
   let errors = $state<Record<string, string>>({});
   let generalError = $state('');
   let isSubmitting = $state(false);
+
+  function handleFileSelection(e: Event) {
+    const target = e.target as HTMLInputElement;
+    if (!target.files) return;
+    const filesArray = Array.from(target.files);
+
+    if (filesArray.length + selectedFiles.length > 5) {
+      errors = { files: 'Maksimal 5 berkas yang dapat dilampirkan.' };
+      return;
+    }
+
+    for (const f of filesArray) {
+      if (f.size > 10 * 1024 * 1024) {
+        errors = { files: `Berkas '${f.name}' melebihi 10 MB.` };
+        return;
+      }
+    }
+
+    selectedFiles = [...selectedFiles, ...filesArray];
+    errors = {};
+    target.value = '';
+  }
+
+  function removeFile(index: number) {
+    selectedFiles = selectedFiles.filter((_, i) => i !== index);
+  }
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
@@ -37,9 +64,13 @@
 
     isSubmitting = true;
     try {
+      // 1. Create ticket
       const res = await fetch('/api/tickets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'fetch',
+        },
         body: JSON.stringify({ title, description, priority }),
       });
 
@@ -54,7 +85,30 @@
         return;
       }
 
-      onCreated?.(data.ticket);
+      const createdTicket: Ticket = data.ticket;
+
+      // 2. Upload attachments if any
+      if (selectedFiles.length > 0) {
+        const formData = new FormData();
+        for (const file of selectedFiles) {
+          formData.append('files', file);
+        }
+
+        const uploadRes = await fetch(`/api/tickets/${createdTicket.id}/attachments`, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'fetch',
+          },
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const uploadData: any = await uploadRes.json();
+          alert(`Tiket dibuat (${createdTicket.ticketNumber}), tetapi lampiran gagal disimpan: ${uploadData.error?.message || 'Terjadi kesalahan'}`);
+        }
+      }
+
+      onCreated?.(createdTicket);
     } catch {
       generalError = 'Terjadi kesalahan jaringan saat menghubungi server.';
     } finally {
@@ -122,6 +176,36 @@
       ></textarea>
       {#if errors.description}
         <span class="field-error">{errors.description}</span>
+      {/if}
+    </div>
+
+    <!-- Attachments Picker -->
+    <div class="form-group">
+      <label for="ticket-files">Lampiran Dokumen / Bukti Gambar (Opsional)</label>
+      <input
+        id="ticket-files"
+        type="file"
+        multiple
+        accept=".jpg,.jpeg,.png,.webp,.pdf"
+        onchange={handleFileSelection}
+        disabled={isSubmitting || selectedFiles.length >= 5}
+      />
+      <span class="field-hint">Format: JPG, PNG, WebP, PDF (Maksimal 10 MB per berkas, maks 5 berkas).</span>
+
+      {#if errors.files}
+        <span class="field-error">{errors.files}</span>
+      {/if}
+
+      {#if selectedFiles.length > 0}
+        <div class="file-preview-list">
+          {#each selectedFiles as file, idx}
+            <div class="file-chip">
+              <span class="file-chip-name">{file.name}</span>
+              <span class="file-chip-size">({(file.size / 1024).toFixed(0)} KB)</span>
+              <button type="button" class="btn-remove-chip" onclick={() => removeFile(idx)}>&times;</button>
+            </div>
+          {/each}
+        </div>
       {/if}
     </div>
 
@@ -194,6 +278,41 @@
   .field-hint {
     font-size: 0.75rem;
     color: var(--color-text-muted);
+  }
+
+  .file-preview-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+  }
+
+  .file-chip-name {
+    font-weight: 500;
+  }
+
+  .file-chip-size {
+    color: var(--color-text-muted);
+  }
+
+  .btn-remove-chip {
+    background: none;
+    border: none;
+    color: var(--color-danger);
+    font-size: 1rem;
+    cursor: pointer;
+    line-height: 1;
   }
 
   .form-actions {

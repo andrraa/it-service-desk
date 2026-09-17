@@ -564,10 +564,23 @@ export async function handleRequest(request: Request, ctx: AppContext) {
             u.username AS "senderUsername",
             u.role AS "senderRole",
             m.message_text AS "messageText", 
-            m.created_at AS "createdAt"
+            m.created_at AS "createdAt",
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT(
+                  'id', a.id,
+                  'originalName', a.original_name,
+                  'mimeType', a.mime_type,
+                  'fileSize', a.file_size
+                )
+              ) FILTER (WHERE a.id IS NOT NULL),
+              '[]'
+            ) AS attachments
           FROM messages m
           JOIN users u ON m.sender_id = u.id
+          LEFT JOIN attachments a ON a.message_id = m.id
           WHERE m.ticket_id = ${ticket.id}
+          GROUP BY m.id, u.username, u.role
           ORDER BY m.created_at ASC, m.id ASC
         `;
 
