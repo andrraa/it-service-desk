@@ -38,14 +38,14 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `migrations/002_sessions.sql`, `src/server/auth.ts`, `src/web/Login.svelte`, `src/web/App.svelte`, `tests/auth.integration.ts`.
 
 ## 5. Bootstrap Super Admin
-- [ ] Buat jalur setup admin tanpa password default publik.
+- [x] Buat jalur setup admin tanpa password default publik.
 - Acceptance: bootstrap eksplisit, tidak mencetak secret ke log, tidak menimpa akun existing; dokumentasikan env dan startup.
 - Verifikasi: bootstrap fresh DB, pengulangan aman, login admin.
 - Dependensi: 4.
 - File: `scripts/bootstrap-admin.ts`, `scripts/migrate.ts`, `README.md`, `.gitignore`, `tests/bootstrap.integration.ts`.
 
 ### Checkpoint akun
-- [ ] Registrasi → login → logout dan kontrol akses terbukti pada API dan browser; review sebelum tiket.
+- [x] Registrasi → login → logout dan kontrol akses terbukti pada API dan browser; review sebelum tiket.
 
 ## 6. Tiket milik pengguna
 - [ ] Buat tiket, detail, daftar paginated, dan pencarian milik sendiri.
