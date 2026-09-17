@@ -17,6 +17,7 @@ import {
   formatTicketNumber,
   type Ticket,
 } from './tickets';
+import { validateMessageInput, type TicketMessage } from './messages';
 import { MemoryRateLimiter } from './rate-limit';
 import { validateCsrf } from './csrf';
 
@@ -314,7 +315,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
   }
 
-  // Dashboard IT Queue: GET /api/dashboard/queue (FIFO within Priority: Critical > High > Medium > Low)
+  // Dashboard IT Queue: GET /api/dashboard/queue
   if (pathname === '/api/dashboard/queue') {
     const user = await getAuthUser();
     if (!user) {
@@ -328,7 +329,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
 
     try {
-      const statusFilter = url.searchParams.get('status')?.trim(); // 'Open', 'In Progress', or empty (both active)
+      const statusFilter = url.searchParams.get('status')?.trim();
       const priorityFilter = url.searchParams.get('priority')?.trim();
       const unassignedOnly = url.searchParams.get('unassigned') === 'true';
       const assignedToMe = url.searchParams.get('assignedToMe') === 'true';
@@ -336,7 +337,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
       const searchPattern = queryParam ? `%${queryParam}%` : null;
 
-      // PRD FIFO Order: Critical -> High -> Medium -> Low, then created_at ASC, then id ASC as tie-breaker
       const rows = await ctx.sql`
         SELECT 
           t.id, 
@@ -396,7 +396,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
 
     try {
-      // Atomic claim: only succeed if ticket is Open and unassigned
       const updated = await ctx.sql`
         UPDATE tickets
         SET 
@@ -430,7 +429,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
       const claimedTicket = updated[0] as Ticket;
 
-      // Record in audit log
       await ctx.sql`
         INSERT INTO audit_logs (ticket_id, actor_id, action, old_value, new_value, reason)
         VALUES (
@@ -501,7 +499,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
         RETURNING id, ticket_number AS "ticketNumber", creator_id AS "creatorId", assignee_id AS "assigneeId", title, description, priority, status, created_at AS "createdAt", updated_at AS "updatedAt"
       `;
 
-      // Record audit log
       await ctx.sql`
         INSERT INTO audit_logs (ticket_id, actor_id, action, old_value, new_value, reason)
         VALUES (
@@ -519,6 +516,98 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       console.error('Update priority error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengubah prioritas.' } }, 500);
     }
+  }
+
+  // Conversation Routes: /api/tickets/:id/messages
+  const messagesMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/messages$/);
+  if (messagesMatch) {
+    const ticketIdOrNumber = messagesMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+
+    // Verify ticket existence and permissions
+    const ticketRows = await ctx.sql`
+      SELECT id, creator_id AS "creatorId", status FROM tickets
+      WHERE id = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
+      LIMIT 1
+    `;
+
+    if (ticketRows.length === 0) {
+      return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
+    }
+
+    const ticket = ticketRows[0] as { id: number | string; creatorId: number | string; status: string };
+
+    // Access control: User can only view/send messages in their own tickets. IT Staff/Admin can in all.
+    if (user.role === 'User' && String(ticket.creatorId) !== String(user.id)) {
+      return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke percakapan tiket ini.' } }, 403);
+    }
+
+    if (request.method === 'GET') {
+      try {
+        const rows = await ctx.sql`
+          SELECT 
+            m.id, 
+            m.ticket_id AS "ticketId", 
+            m.sender_id AS "senderId", 
+            u.username AS "senderUsername",
+            u.role AS "senderRole",
+            m.message_text AS "messageText", 
+            m.created_at AS "createdAt"
+          FROM messages m
+          JOIN users u ON m.sender_id = u.id
+          WHERE m.ticket_id = ${ticket.id}
+          ORDER BY m.created_at ASC, m.id ASC
+        `;
+
+        return json({ messages: rows });
+      } catch (err) {
+        console.error('Fetch messages error:', err);
+        return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil pesan tiket.' } }, 500);
+      }
+    }
+
+    if (request.method === 'POST') {
+      // PRD: Tiket Closed menolak pengiriman pesan di backend
+      if (ticket.status === 'Closed') {
+        return json({ error: { code: 'FORBIDDEN', message: 'Tiket telah ditutup dan bersifat read-only. Pesan baru tidak diizinkan.' } }, 403);
+      }
+
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+      }
+
+      const validation = validateMessageInput(body);
+      if (!validation.valid) {
+        return json({ error: { code: 'VALIDATION_ERROR', message: 'Pesan tidak valid.', details: validation.errors } }, 422);
+      }
+
+      const { messageText } = validation.data;
+
+      try {
+        const inserted = await ctx.sql`
+          INSERT INTO messages (ticket_id, sender_id, message_text)
+          VALUES (${ticket.id}, ${user.id}, ${messageText})
+          RETURNING id, ticket_id AS "ticketId", sender_id AS "senderId", message_text AS "messageText", created_at AS "createdAt"
+        `;
+
+        const newMsg = inserted[0] as TicketMessage;
+        newMsg.senderUsername = user.username;
+        newMsg.senderRole = user.role;
+
+        return json({ message: 'Pesan berhasil dikirim.', data: newMsg }, 201);
+      } catch (err) {
+        console.error('Send message error:', err);
+        return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengirim pesan.' } }, 500);
+      }
+    }
+
+    return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET, POST' });
   }
 
   // Ticket Routes

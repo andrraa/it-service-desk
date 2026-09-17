@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Conversation from './Conversation.svelte';
   import type { Ticket } from '../server/tickets';
   import type { User } from '../server/auth';
 
@@ -96,15 +97,12 @@
       <p class="description-text">{ticket.description}</p>
     </div>
 
-    <div class="ticket-chat-placeholder">
-      <div class="placeholder-content">
-        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-        <h4>Ruang Percakapan & Penanganan Tiket</h4>
-        <p>Pertukaran pesan, upload bukti berkas, dan pengambilan penanganan IT akan aktif pada tahap berikutnya (Task #7 & #8).</p>
-      </div>
-    </div>
+    <!-- Live Conversation & Polling -->
+    <Conversation
+      ticketId={ticket.id}
+      ticketStatus={ticket.status}
+      {currentUser}
+    />
   {/if}
 </div>
 
@@ -192,29 +190,6 @@
     line-height: 1.6;
     white-space: pre-wrap;
     color: var(--color-text);
-  }
-
-  .ticket-chat-placeholder {
-    text-align: center;
-    background-color: var(--color-bg);
-    padding: 36px 20px;
-  }
-
-  .placeholder-content svg {
-    color: var(--color-text-muted);
-    margin-bottom: 8px;
-  }
-
-  .placeholder-content h4 {
-    font-size: 1rem;
-    margin-bottom: 4px;
-  }
-
-  .placeholder-content p {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-    max-width: 480px;
-    margin: 0 auto;
   }
 
   .btn {

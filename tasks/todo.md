@@ -65,7 +65,7 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - [x] Pelaporan dan penanganan nyata berjalan; nomor unik, ownership, dan race condition lulus pengujian.
 
 ## 8. Percakapan
-- [ ] Tambah pesan dan polling pada tiket aktif.
+- [x] Tambah pesan dan polling pada tiket aktif.
 - Acceptance: pesan chronological/paginated; empty ditolak; error mempertahankan draft dan tidak mengklaim sukses; tiket Closed menolak pesan di backend.
 - Verifikasi: test akses silang, pagination, pesan kosong, kegagalan jaringan, polling di browser.
 - Dependensi: 6–7.
