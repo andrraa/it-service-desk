@@ -116,6 +116,13 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - Dependensi: 11 dan 12a.
 - File: `src/web/Login.svelte`, `src/web/Password.svelte`, `src/web/Admin.svelte`, `src/web/App.svelte`, `tests/password.integration.ts`.
 
+## 12c. URL routing frontend
+- [ ] Ganti navigasi berbasis state `currentView` dengan URL nyata dan history browser.
+- Acceptance: login `/login`, registrasi `/register`, tiket `/tickets`, pembuatan `/tickets/new`, detail `/tickets/:ticketNumber`, dan antrean IT `/it/queue`; refresh mempertahankan halaman; Back/Forward bekerja; URL detail dapat dibookmark; route tetap dilindungi sesuai sesi/role.
+- Verifikasi: navigasi langsung dan refresh setiap route, Back/Forward, deep link detail valid/tidak valid/tanpa hak, logout dari protected route, desktop/mobile, serta `bun run check`, `bun test`, dan `bun run build`.
+- Dependensi: 4, 6–10; shell tidak lagi memakai `currentView` sebagai sumber navigasi utama.
+- File: `src/web/App.svelte`, komponen router minimal atau History API native, dan test routing frontend.
+
 ## 13a. Hardening dan regression
 - [ ] Audit seluruh acceptance criteria PRD dan tutup celah keamanan/UX.
 - Acceptance: tidak ada role/ownership bypass; DB test terpisah; responsive/keyboard/dua tema dan error states konsisten.
