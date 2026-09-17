@@ -287,7 +287,50 @@ Breadcrumb hanya pada hierarki nyata dan clickable, misalnya `Tiket Saya / TKT-0
 
 Empat ringkasan Antrean IT tetap dipertahankan: **Open, In Progress, aktif Critical, Closed hari ini**. Gunakan satu strip ringkasan dengan empat bagian, bukan empat card besar berwarna. Definisi timezone “hari ini” mengikuti keputusan backend/produk, bukan tebakan UI.
 
-Detail tiket desktop dapat memakai dua kolom: konten/percakapan fleksibel + metadata 280 px. Pada mobile, ringkasan dan metadata penting berada sebelum percakapan; histori aktivitas rinci boleh dilipat tetapi tetap dapat diakses.
+### 7.1 Layout halaman Detail Tiket
+
+#### Desktop (`≥ 1024 px`)
+
+Gunakan dua kolom yang terlihat bersamaan:
+
+```text
+┌────────────────────────────┬──────────────────────────────────────┐
+│ Informasi tiket            │ Ruang chat                           │
+│                            │                                      │
+│ Nomor, judul               │ Daftar pesan                         │
+│ Status, prioritas          │ Lampiran pesan                       │
+│ Pelapor, waktu, usia       │                                      │
+│ Penanggung jawab           │                                      │
+│ Deskripsi dan lampiran     │                                      │
+│ Solusi jika Closed         │ Composer / notice read-only          │
+│ Aktivitas penanganan       │                                      │
+└────────────────────────────┴──────────────────────────────────────┘
+```
+
+- Kolom kiri **Informasi Tiket** memakai sekitar 38–42% lebar; kolom kanan **Ruang Chat** memakai sisa lebar dengan minimum nyaman 480 px.
+- Informasi tiket berada di kiri, ruang chat selalu di kanan. Jangan menaruh chat di bawah informasi pada desktop jika viewport masih memenuhi breakpoint.
+- Header halaman di atas kedua kolom memuat tombol kembali, nomor tiket, judul singkat, serta aksi berizin seperti Tutup Tiket.
+- Kolom kiri menggunakan section dan separator, bukan card terpisah untuk setiap metadata.
+- Kolom kanan memiliki heading “Ruang Chat”, daftar pesan, lalu composer di bagian bawah. Tiket Closed mengganti composer dengan notice read-only.
+- Kedua kolom mengikuti satu scroll container milik main content. Jangan membuat scrollbar vertikal terpisah pada informasi dan chat; composer boleh `position: sticky` di bagian bawah area main selama tidak menutupi pesan.
+- Deskripsi panjang, nama file, dan pesan harus wrap. Lebar chat tidak boleh terdesak oleh label metadata yang panjang.
+
+#### Tablet dan mobile (`< 1024 px`)
+
+Ubah menjadi satu kolom dengan urutan:
+
+1. Header: kembali, nomor tiket, status/prioritas, dan aksi berizin.
+2. Ringkasan informasi penting: judul, pelapor, waktu/usia, penanggung jawab.
+3. Deskripsi dan lampiran laporan awal.
+4. Solusi jika Closed.
+5. Ruang chat.
+6. Aktivitas penanganan dalam `<details>` tertutup secara default.
+
+- Jangan membuat tab “Info” dan “Chat” pada MVP; satu alur vertikal lebih sederhana dan tidak menyembunyikan konteks.
+- Pada mobile, ruang chat memakai lebar penuh. Composer mengikuti bawah konten dan tidak boleh menutupi pesan atau tertutup keyboard virtual.
+- Informasi utama tetap tampil sebelum chat, tetapi hindari metadata berulang agar pengguna tidak perlu scroll terlalu jauh untuk mencapai percakapan.
+- Lampiran dan aksi disusun satu kolom; target sentuh minimal 44 px.
+- Hanya main content yang scroll; topbar tetap diam dan sidebar tetap berupa drawer.
 
 ## 8. Responsivitas
 
@@ -396,6 +439,8 @@ Urutan kerja:
 - [ ] Saat main content di-scroll pada desktop dan mobile, sidebar serta topbar tetap pada posisi semula.
 - [ ] Hanya main content memiliki scrollbar vertikal utama; tidak ada double scrollbar pada body/sidebar/panel.
 - [ ] Daftar mobile tetap menampilkan status, prioritas, penanggung jawab, serta pelapor/waktu/usia untuk antrean IT.
+- [ ] Detail tiket desktop menampilkan Informasi Tiket di kiri dan Ruang Chat di kanan pada viewport ≥1024 px.
+- [ ] Detail tiket tablet/mobile berubah menjadi satu kolom: informasi utama → deskripsi/lampiran → solusi → chat → aktivitas.
 - [ ] Semua role hanya melihat navigasi dan aksi yang berhak diakses; backend tetap menolak akses ilegal.
 - [ ] Loading, kosong, filter kosong, error, sukses, konflik claim, upload gagal, dan pesan gagal diuji.
 - [ ] Tiket Closed read-only dan solusi terbaca; aksi penutupan tetap mensyaratkan solusi serta konfirmasi.
