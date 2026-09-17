@@ -1189,5 +1189,248 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
   }
 
+  // Admin Routes (Super Admin Only)
+  if (pathname === '/api/admin/users') {
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya Super Admin yang dapat mengakses manajemen pengguna.' } }, 403);
+    }
+
+    if (request.method === 'GET') {
+      try {
+        const rows = await ctx.sql`
+          SELECT 
+            id, nik, username, role, is_active AS "isActive", 
+            must_change_password AS "mustChangePassword", created_at AS "createdAt"
+          FROM users
+          ORDER BY role ASC, created_at DESC
+        `;
+        return json({ users: rows });
+      } catch (err) {
+        console.error('List users error:', err);
+        return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil daftar pengguna.' } }, 500);
+      }
+    }
+
+    if (request.method === 'POST') {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+      }
+
+      // Validasi input create IT Staff
+      const { validateCreateITStaffInput } = await import('./admin');
+      const validation = validateCreateITStaffInput(body);
+      if (!validation.valid) {
+        return json({ error: { code: 'VALIDATION_ERROR', message: 'Data staf IT tidak valid.', details: validation.errors } }, 422);
+      }
+
+      const { nik, username, temporaryPassword } = validation.data;
+
+      try {
+        const existing = await ctx.sql`
+          SELECT nik, username FROM users
+          WHERE nik = ${nik} OR LOWER(username) = LOWER(${username})
+          LIMIT 1
+        `;
+
+        if (existing.length > 0) {
+          const found = existing[0] as { nik: string; username: string };
+          const details: Record<string, string> = {};
+          if (found.nik === nik) details.nik = 'NIK sudah terdaftar.';
+          if (found.username.toLowerCase() === username.toLowerCase()) details.username = 'Username sudah digunakan.';
+          return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details } }, 409);
+        }
+
+        const passwordHash = await hashPassword(temporaryPassword);
+
+        const inserted = await ctx.sql`
+          INSERT INTO users (nik, username, password_hash, role, is_active, must_change_password)
+          VALUES (${nik}, ${username}, ${passwordHash}, 'IT Staff', TRUE, TRUE)
+          RETURNING id, nik, username, role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+        `;
+
+        const newStaff = inserted[0];
+
+        return json({
+          message: 'Akun staf IT berhasil dibuat.',
+          user: newStaff,
+          temporaryPassword, // One-time display to Super Admin
+        }, 201);
+      } catch (err) {
+        console.error('Create IT Staff error:', err);
+        return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat membuat akun IT Staff.' } }, 500);
+      }
+    }
+
+    return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET, POST' });
+  }
+
+  // Update User: PATCH /api/admin/users/:id
+  const adminUserMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+  if (adminUserMatch) {
+    const targetUserId = adminUserMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya Super Admin yang berhak mengelola akun.' } }, 403);
+    }
+    if (request.method !== 'PATCH') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'PATCH' });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+    }
+
+    if (typeof body !== 'object' || body === null) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: 'Data tidak valid.' } }, 422);
+    }
+
+    const { isActive, nik, username } = body as Record<string, unknown>;
+
+    try {
+      const targetRows = await ctx.sql`SELECT id, nik, username, role, is_active AS "isActive" FROM users WHERE id = ${targetUserId} LIMIT 1`;
+      if (targetRows.length === 0) {
+        return json({ error: { code: 'NOT_FOUND', message: 'Pengguna tidak ditemukan.' } }, 404);
+      }
+      const targetUser = targetRows[0] as { id: number | string; nik: string; username: string; role: string; isActive: boolean };
+
+      // Acceptance: Lindungi Super Admin aktif terakhir
+      if (targetUser.role === 'Super Admin' && isActive === false) {
+        const activeAdmins = await ctx.sql`
+          SELECT COUNT(*)::int AS count FROM users WHERE role = 'Super Admin' AND is_active = TRUE
+        `;
+        if (activeAdmins[0].count <= 1) {
+          return json({ error: { code: 'FORBIDDEN', message: 'Tidak dapat menonaktifkan Super Admin aktif terakhir.' } }, 403);
+        }
+      }
+
+      // Acceptance: Akun IT dengan tiket aktif tidak boleh dinonaktifkan sebelum tiketnya dialihkan
+      if (targetUser.role === 'IT Staff' && isActive === false) {
+        const activeAssigned = await ctx.sql`
+          SELECT COUNT(*)::int AS count FROM tickets WHERE assignee_id = ${targetUser.id} AND status IN ('Open', 'In Progress')
+        `;
+        if (activeAssigned[0].count > 0) {
+          return json({
+            error: {
+              code: 'CONFLICT',
+              message: `Staf IT masih memiliki ${activeAssigned[0].count} tiket aktif yang sedang ditangani. Alihkan penugasan tiket terlebih dahulu.`,
+            },
+          }, 409);
+        }
+      }
+
+      // Jalankan update
+      const updatedUserRows = await ctx.sql`
+        UPDATE users
+        SET 
+          is_active = COALESCE(${typeof isActive === 'boolean' ? isActive : null}, is_active),
+          nik = COALESCE(${typeof nik === 'string' && nik.trim() ? nik.trim() : null}, nik),
+          username = COALESCE(${typeof username === 'string' && username.trim() ? username.trim() : null}, username),
+          updated_at = NOW()
+        WHERE id = ${targetUser.id}
+        RETURNING id, nik, username, role, is_active AS "isActive", must_change_password AS "mustChangePassword"
+      `;
+
+      // Jika dinonaktifkan: Acceptance — cabut seluruh sesi aktifnya
+      if (isActive === false) {
+        await ctx.sql`DELETE FROM sessions WHERE user_id = ${targetUser.id}`;
+      }
+
+      return json({
+        message: 'Data akun berhasil diperbarui.',
+        user: updatedUserRows[0],
+      });
+    } catch (err) {
+      console.error('Admin update user error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal memperbarui akun.' } }, 500);
+    }
+  }
+
+  // Reassign Ticket: PATCH /api/admin/tickets/:id/assign
+  const reassignMatch = pathname.match(/^\/api\/admin\/tickets\/([^/]+)\/assign$/);
+  if (reassignMatch) {
+    const ticketId = reassignMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya Super Admin yang dapat mengalihkan penugasan tiket.' } }, 403);
+    }
+    if (request.method !== 'PATCH') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'PATCH' });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+    }
+
+    const { newAssigneeId, reason } = (body || {}) as Record<string, unknown>;
+    if (!newAssigneeId) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: 'Target penanggung jawab baru wajib ditentukan.' } }, 422);
+    }
+
+    try {
+      const targetStaffRows = await ctx.sql`
+        SELECT id, username, role, is_active AS "isActive" FROM users WHERE id = ${newAssigneeId} LIMIT 1
+      `;
+      if (targetStaffRows.length === 0 || !targetStaffRows[0].isActive || (targetStaffRows[0].role !== 'IT Staff' && targetStaffRows[0].role !== 'Super Admin')) {
+        return json({ error: { code: 'VALIDATION_ERROR', message: 'Staf IT tujuan tidak valid atau tidak aktif.' } }, 422);
+      }
+
+      const ticketRows = await ctx.sql`
+        SELECT id, assignee_id AS "assigneeId", status FROM tickets WHERE id = ${ticketId} OR ticket_number = ${ticketId} LIMIT 1
+      `;
+      if (ticketRows.length === 0) return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
+      const ticket = ticketRows[0];
+
+      if (ticket.status === 'Closed') {
+        return json({ error: { code: 'FORBIDDEN', message: 'Tiket sudah Closed, tidak dapat dialihkan.' } }, 403);
+      }
+
+      const oldAssigneeId = ticket.assigneeId;
+
+      const updated = await ctx.sql`
+        UPDATE tickets
+        SET assignee_id = ${newAssigneeId}, status = 'In Progress', updated_at = NOW()
+        WHERE id = ${ticket.id}
+        RETURNING id, ticket_number AS "ticketNumber", assignee_id AS "assigneeId", status
+      `;
+
+      // Log audit
+      await ctx.sql`
+        INSERT INTO audit_logs (ticket_id, actor_id, action, old_value, new_value, reason)
+        VALUES (
+          ${ticket.id},
+          ${user.id},
+          'REASSIGN_TICKET',
+          ${{ assigneeId: oldAssigneeId }},
+          ${{ assigneeId: newAssigneeId }},
+          ${typeof reason === 'string' && reason.trim() ? reason.trim() : 'Dialihkan oleh Super Admin.'}
+        )
+      `;
+
+      return json({ message: 'Penugasan tiket berhasil dialihkan.', ticket: updated[0] });
+    } catch (err) {
+      console.error('Reassign error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengalihkan tiket.' } }, 500);
+    }
+  }
+
   return json({ error: { code: 'NOT_FOUND', message: 'Endpoint tidak ditemukan.' } }, 404);
 }

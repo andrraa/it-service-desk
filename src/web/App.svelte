@@ -8,12 +8,13 @@
   import CreateTicket from './CreateTicket.svelte';
   import TicketDetail from './TicketDetail.svelte';
   import Dashboard from './Dashboard.svelte';
+  import Admin from './Admin.svelte';
   import type { User } from '../server/auth';
   import type { Ticket } from '../server/tickets';
 
   let currentUser = $state<User | null>(null);
   let isCheckingAuth = $state(true);
-  let currentView = $state<'overview' | 'register' | 'login' | 'tickets' | 'create-ticket' | 'ticket-detail' | 'dashboard'>('overview');
+  let currentView = $state<'overview' | 'register' | 'login' | 'tickets' | 'create-ticket' | 'ticket-detail' | 'dashboard' | 'admin'>('overview');
   let selectedTicket = $state<Ticket | null>(null);
 
   async function checkAuth() {
@@ -84,6 +85,21 @@
               <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
             Dashboard Antrean IT
+          </button>
+        {/if}
+
+        {#if currentUser.role === 'Super Admin'}
+          <button
+            type="button"
+            class="nav-link"
+            class:active={currentView === 'admin'}
+            aria-current={currentView === 'admin' ? 'page' : undefined}
+            onclick={() => (currentView = 'admin')}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            Kelola Staf & Akun
           </button>
         {/if}
 
@@ -174,6 +190,8 @@
             ? 'Ringkasan'
             : currentView === 'dashboard'
             ? 'Dashboard IT'
+            : currentView === 'admin'
+            ? 'Panel Super Admin'
             : currentView === 'register'
             ? 'Daftar Akun'
             : currentView === 'login'
@@ -238,6 +256,8 @@
             currentView = 'ticket-detail';
           }}
         />
+      {:else if currentView === 'admin' && currentUser && currentUser.role === 'Super Admin'}
+        <Admin />
       {:else if currentView === 'login'}
         <Login
           onSuccess={(user) => {

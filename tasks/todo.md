@@ -96,7 +96,7 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - [x] User melapor → IT mengambil → berdiskusi/lampiran → solusi → Closed → histori, terbukti lintas role.
 
 ## 11. Administrasi IT
-- [ ] Buat/update/aktifkan/nonaktifkan IT; pindahkan assignment; tampilkan aktivitas admin.
+- [x] Buat/update/aktifkan/nonaktifkan IT; pindahkan assignment; tampilkan aktivitas admin.
 - Acceptance: admin-only; akun baru wajib ganti password; nonaktif mencabut sesi dan menolak tiket aktif; last active admin terlindungi.
 - Verifikasi: permintaan role ilegal, disable/reassign races, sesi dicabut, histori tetap ada, last-admin guard.
 - Dependensi: 10; dukungan password sementara di 12a dapat dikerjakan dahulu bila diperlukan.
