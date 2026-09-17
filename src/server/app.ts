@@ -1082,10 +1082,13 @@ async function routeRequest(request: Request, ctx: AppContext) {
 
         const status = url.searchParams.get('status');
         if (status && !['Open', 'In Progress', 'Closed'].includes(status)) throw new RequestError(422, 'VALIDATION_ERROR', 'Status tidak valid.');
+        const priority = url.searchParams.get('priority');
+        if (priority && !['Low', 'Medium', 'High', 'Critical'].includes(priority)) throw new RequestError(422, 'VALIDATION_ERROR', 'Prioritas tidak valid.');
         const scope = user.role === 'User' || url.searchParams.get('mine') === 'true'
           ? ctx.sql`t.creator_id = ${user.id}` : ctx.sql`TRUE`;
         const filter = ctx.sql`${scope}
           AND (${status ? ctx.sql`t.status = ${status}` : ctx.sql`TRUE`})
+          AND (${priority ? ctx.sql`t.priority = ${priority}` : ctx.sql`TRUE`})
           AND (${searchPattern ? ctx.sql`(t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})` : ctx.sql`TRUE`})`;
         const ticketsQuery = await ctx.sql`
           SELECT t.id, t.ticket_number AS "ticketNumber", t.creator_id AS "creatorId",

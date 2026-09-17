@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import type { TicketPriority, Ticket } from '../server/tickets';
 
   interface Props {
@@ -8,43 +9,124 @@
 
   let { onCreated, onCancel }: Props = $props();
 
+  interface FileItem {
+    id: string;
+    file: File;
+    previewUrl?: string;
+    error?: string;
+  }
+
   let title = $state('');
   let description = $state('');
   let priority = $state<TicketPriority>('Medium');
-  let selectedFiles = $state<File[]>([]);
+  let selectedFiles = $state<FileItem[]>([]);
+  let fileError = $state('');
 
   let errors = $state<Record<string, string>>({});
   let generalError = $state('');
   let isSubmitting = $state(false);
   let createdTicket = $state<Ticket | null>(null);
-  let deliveryUncertain = $state(false);
+  let isDragging = $state(false);
+  let fileInputEl = $state<HTMLInputElement | null>(null);
+
   const requestId = crypto.randomUUID();
   const uploadId = crypto.randomUUID();
 
-  function handleFileSelection(e: Event) {
-    const target = e.target as HTMLInputElement;
-    if (!target.files) return;
-    const filesArray = Array.from(target.files);
+  const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+  const MAX_TOTAL_FILES = 5;
 
-    if (filesArray.length + selectedFiles.length > 5) {
-      errors = { files: 'Maksimal 5 berkas yang dapat dilampirkan.' };
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function validateAndAddFiles(filesList: FileList | File[]) {
+    fileError = '';
+    const incoming = Array.from(filesList);
+
+    if (selectedFiles.length + incoming.length > MAX_TOTAL_FILES) {
+      fileError = `Maksimal ${MAX_TOTAL_FILES} berkas yang dapat dilampirkan (tersisa ${MAX_TOTAL_FILES - selectedFiles.length}).`;
       return;
     }
 
-    for (const f of filesArray) {
-      if (f.size > 10 * 1024 * 1024) {
-        errors = { files: `Berkas '${f.name}' melebihi 10 MB.` };
-        return;
+    const newItems: FileItem[] = [];
+    const rejectedReasons: string[] = [];
+
+    for (const file of incoming) {
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        rejectedReasons.push(`'${file.name}': format tidak didukung`);
+        continue;
       }
+      if (file.size > MAX_FILE_SIZE) {
+        rejectedReasons.push(`'${file.name}': melebihi batas 10 MB`);
+        continue;
+      }
+
+      let previewUrl: string | undefined;
+      if (file.type.startsWith('image/')) {
+        previewUrl = URL.createObjectURL(file);
+      }
+
+      newItems.push({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl,
+      });
     }
 
-    selectedFiles = [...selectedFiles, ...filesArray];
-    errors = {};
-    target.value = '';
+    if (rejectedReasons.length > 0) {
+      fileError = `Beberapa berkas ditolak: ${rejectedReasons.join('; ')}. Berkas valid lainnya tetap ditambahkan.`;
+    }
+
+    selectedFiles = [...selectedFiles, ...newItems];
   }
 
-  function removeFile(index: number) {
-    selectedFiles = selectedFiles.filter((_, i) => i !== index);
+  function handleNativeFileChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files.length > 0) {
+      validateAndAddFiles(target.files);
+      target.value = '';
+    }
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    isDragging = true;
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    isDragging = false;
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragging = false;
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      validateAndAddFiles(e.dataTransfer.files);
+    }
+  }
+
+  function removeFile(id: string) {
+    const item = selectedFiles.find((f) => f.id === id);
+    if (item?.previewUrl) {
+      URL.revokeObjectURL(item.previewUrl);
+    }
+    selectedFiles = selectedFiles.filter((f) => f.id !== id);
+  }
+
+  function triggerFileInput() {
+    fileInputEl?.click();
+  }
+
+  function handleDropzoneKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      triggerFileInput();
+    }
   }
 
   async function handleSubmit(e: Event) {
@@ -53,9 +135,9 @@
     generalError = '';
 
     if (!title.trim()) {
-      errors.title = 'Judul tiket wajib diisi.';
+      errors.title = 'Judul kendala wajib diisi.';
     } else if (title.trim().length < 5) {
-      errors.title = 'Judul tiket minimal 5 karakter.';
+      errors.title = 'Judul kendala minimal 5 karakter.';
     }
 
     if (!description.trim()) {
@@ -67,41 +149,39 @@
     if (Object.keys(errors).length > 0) return;
 
     isSubmitting = true;
-    deliveryUncertain = true;
     try {
-      // Retry failed uploads on the same ticket; request keys also cover a lost create response.
       if (!createdTicket) {
-      const res = await fetch('/api/tickets', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'fetch',
-        },
-        body: JSON.stringify({ title, description, priority, requestId }),
-      });
+        const res = await fetch('/api/tickets', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'fetch',
+          },
+          body: JSON.stringify({ title: title.trim(), description: description.trim(), priority, requestId }),
+        });
 
-      const data: any = await res.json();
+        const data: any = await res.json();
 
-      if (!res.ok) {
-        if (res.status < 500) deliveryUncertain = false;
-        if (data.error?.details) {
-          errors = data.error.details;
-        } else {
-          generalError = data.error?.message || 'Gagal membuat tiket.';
+        if (!res.ok) {
+          if (data.error?.details) {
+            errors = data.error.details;
+          } else {
+            generalError = data.error?.message || 'Gagal membuat tiket.';
+          }
+          return;
         }
-        return;
+
+        createdTicket = data.ticket;
       }
 
-      createdTicket = data.ticket;
-      }
       if (!createdTicket) return;
 
-      // 2. Upload attachments if any
+      // Upload attachments if any
       if (selectedFiles.length > 0) {
         const formData = new FormData();
         formData.append('uploadId', uploadId);
-        for (const file of selectedFiles) {
-          formData.append('files', file);
+        for (const item of selectedFiles) {
+          formData.append('files', item.file);
         }
 
         const uploadRes = await fetch(`/api/tickets/${createdTicket.id}/attachments`, {
@@ -113,9 +193,8 @@
         });
 
         if (!uploadRes.ok) {
-          if (uploadRes.status < 500) deliveryUncertain = false;
           const uploadData: any = await uploadRes.json();
-          generalError = `Tiket ${createdTicket.ticketNumber} sudah dibuat. Lampiran belum tersimpan: ${uploadData.error?.message || 'Terjadi kesalahan'}. Coba kirim lagi untuk melanjutkan upload, bukan membuat tiket baru.`;
+          generalError = `Tiket ${createdTicket.ticketNumber} berhasil dibuat, tetapi lampiran belum tersimpan: ${uploadData.error?.message || 'Terjadi kesalahan saat mengunggah'}. Pilihan berkas Anda tetap tersimpan; silakan coba upload lagi.`;
           return;
         }
       }
@@ -123,21 +202,26 @@
       onCreated?.(createdTicket);
     } catch {
       generalError = createdTicket
-        ? `Tiket ${createdTicket.ticketNumber} sudah dibuat. Upload belum terkonfirmasi; pilihan berkas tetap tersedia. Coba kirim lagi.`
-        : 'Kiriman belum terkonfirmasi. Coba kirim lagi; ID permintaan yang sama mencegah tiket duplikat.';
+        ? `Tiket ${createdTicket.ticketNumber} sudah dibuat. Koneksi terganggu saat mengunggah berkas; pilihan berkas Anda tetap tersedia. Silakan tekan 'Coba Upload Lagi'.`
+        : 'Kiriman belum terkonfirmasi akibat gangguan jaringan. Data formulir Anda aman, silakan coba kirim lagi.';
     } finally {
       isSubmitting = false;
     }
   }
+
+  onDestroy(() => {
+    for (const item of selectedFiles) {
+      if (item.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+    }
+  });
 </script>
 
-<div class="ticket-form-card">
-  <div class="card-header">
-    <div>
-      <p class="eyebrow">FORMULIR PENGADUAN</p>
-      <h2>Buat Tiket Kendala Baru</h2>
-    </div>
-    <span class="stage-label">Status awal: Open</span>
+<div class="create-ticket-view">
+  <div class="form-header">
+    <h1>Buat Tiket</h1>
+    <p class="form-instructions">Sampaikan laporan kendala IT secara rinci agar tim penanganan dapat segera menindaklanjuti.</p>
   </div>
 
   {#if generalError}
@@ -158,17 +242,23 @@
         bind:value={title}
         placeholder="Ringkasan singkat kendala yang Anda alami"
         required
-        disabled={isSubmitting || deliveryUncertain || Boolean(createdTicket)}
+        disabled={isSubmitting || Boolean(createdTicket)}
         class:input-error={Boolean(errors.title)}
+        aria-invalid={Boolean(errors.title)}
+        aria-describedby={errors.title ? 'ticket-title-error' : undefined}
       />
       {#if errors.title}
-        <span class="field-error">{errors.title}</span>
+        <span id="ticket-title-error" class="field-error">{errors.title}</span>
       {/if}
     </div>
 
     <div class="form-group">
       <label for="ticket-priority">Tingkat Prioritas</label>
-      <select id="ticket-priority" bind:value={priority} disabled={isSubmitting || deliveryUncertain || Boolean(createdTicket)}>
+      <select
+        id="ticket-priority"
+        bind:value={priority}
+        disabled={isSubmitting || Boolean(createdTicket)}
+      >
         <option value="Low">Low — Gangguan ringan / tidak mendesak</option>
         <option value="Medium">Medium — Kendala mengganggu, ada alternatif</option>
         <option value="High">High — Pekerjaan utama terhambat</option>
@@ -178,54 +268,112 @@
     </div>
 
     <div class="form-group">
-      <label for="ticket-description">Deskripsi Lengkap Kendala</label>
+      <label for="ticket-description">Deskripsi Kendala</label>
       <textarea
         id="ticket-description"
         rows="5"
         bind:value={description}
-        placeholder="Jelaskan kronologi, langkah yang sudah dicoba, dan pesan error jika ada…"
+        placeholder="Jelaskan kronologi kendala, langkah yang sudah dicoba, dan pesan error yang muncul…"
         required
-        disabled={isSubmitting || deliveryUncertain || Boolean(createdTicket)}
+        disabled={isSubmitting || Boolean(createdTicket)}
         class:input-error={Boolean(errors.description)}
+        aria-invalid={Boolean(errors.description)}
+        aria-describedby={errors.description ? 'ticket-desc-error' : undefined}
       ></textarea>
       {#if errors.description}
-        <span class="field-error">{errors.description}</span>
+        <span id="ticket-desc-error" class="field-error">{errors.description}</span>
       {/if}
     </div>
 
-    <!-- Attachments Picker -->
+    <!-- Custom File Upload Section -->
     <div class="form-group">
-      <label for="ticket-files">Lampiran Dokumen / Bukti Gambar (Opsional)</label>
+      <span class="label-text">Lampiran Berkas (Opsional)</span>
+
+      <!-- Hidden Native File Input -->
       <input
+        bind:this={fileInputEl}
         id="ticket-files"
         type="file"
         multiple
         accept=".jpg,.jpeg,.png,.webp,.pdf"
-        onchange={handleFileSelection}
-        disabled={isSubmitting || deliveryUncertain || selectedFiles.length >= 5}
+        onchange={handleNativeFileChange}
+        disabled={isSubmitting || selectedFiles.length >= MAX_TOTAL_FILES}
+        class="sr-only"
       />
-      <span class="field-hint">Format: JPG, PNG, WebP, PDF (Maksimal 10 MB per berkas, maks 5 berkas).</span>
 
-      {#if errors.files}
-        <span class="field-error">{errors.files}</span>
+      <!-- Custom Dropzone -->
+      <div
+        class="custom-dropzone"
+        class:drag-over={isDragging}
+        ondragover={handleDragOver}
+        ondragleave={handleDragLeave}
+        ondrop={handleDrop}
+        onclick={triggerFileInput}
+        onkeydown={handleDropzoneKeydown}
+        tabindex="0"
+        role="button"
+        aria-label="Pilih atau seret berkas lampiran"
+      >
+        <div class="dropzone-content">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <div class="dropzone-text">
+            <span class="btn-select-file">Pilih Berkas</span>
+            <span class="dropzone-hint">atau seret dan lepas berkas ke area ini</span>
+          </div>
+          <span class="dropzone-specs">
+            Format: JPG, PNG, WebP, PDF · Maksimal 10 MB per berkas · Maksimal 5 berkas
+          </span>
+        </div>
+      </div>
+
+      {#if fileError}
+        <span class="field-error">{fileError}</span>
       {/if}
 
+      <!-- Selected Files List -->
       {#if selectedFiles.length > 0}
-        <div class="file-preview-list">
-          {#each selectedFiles as file, idx}
-            <div class="file-chip">
-              <span class="file-chip-name">{file.name}</span>
-              <span class="file-chip-size">({(file.size / 1024).toFixed(0)} KB)</span>
-              <button type="button" class="btn-remove-chip" aria-label={`Hapus lampiran ${file.name}`} disabled={isSubmitting || deliveryUncertain} onclick={() => removeFile(idx)}>&times;</button>
+        <div class="selected-files-list">
+          {#each selectedFiles as item}
+            <div class="file-item-row">
+              <div class="file-preview-slot">
+                {#if item.previewUrl}
+                  <img src={item.previewUrl} alt={item.file.name} class="file-thumb" />
+                {:else}
+                  <div class="file-doc-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </div>
+                {/if}
+              </div>
+              <div class="file-details">
+                <span class="file-name" title={item.file.name}>{item.file.name}</span>
+                <span class="file-meta">{formatFileSize(item.file.size)}</span>
+              </div>
+              <button
+                type="button"
+                class="btn-remove-file"
+                onclick={(e) => { e.stopPropagation(); removeFile(item.id); }}
+                disabled={isSubmitting}
+                aria-label={`Hapus lampiran ${item.file.name}`}
+              >
+                Hapus
+              </button>
             </div>
           {/each}
         </div>
       {/if}
     </div>
 
+    <!-- Actions -->
     <div class="form-actions">
       <button type="submit" class="btn btn-primary" disabled={isSubmitting}>
-        {isSubmitting ? 'Menyimpan…' : createdTicket ? 'Coba Upload Lagi' : 'Kirim Laporan Tiket'}
+        {isSubmitting ? 'Menyimpan…' : createdTicket ? 'Coba Upload Lagi' : 'Kirim Tiket'}
       </button>
       <button type="button" class="btn btn-secondary" onclick={onCancel} disabled={isSubmitting}>
         Batal
@@ -235,153 +383,181 @@
 </div>
 
 <style>
-  .ticket-form-card {
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: 24px;
-    margin-bottom: 24px;
+  .create-ticket-view {
+    width: 100%;
+    max-width: none;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
   }
 
-  .card-header {
+  .form-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 20px;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-instructions {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
   }
 
   .ticket-form {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 20px;
+    width: 100%;
   }
 
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  label {
+  .label-text {
     font-size: 0.875rem;
     font-weight: 600;
-  }
-
-  input, select, textarea {
-    padding: 10px 14px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background-color: var(--color-bg);
     color: var(--color-text);
-    font-size: 0.9rem;
   }
 
-  input:focus, select:focus, textarea:focus {
-    border-color: var(--color-primary);
+  /* Custom Dropzone */
+  .custom-dropzone {
+    border: 1px dashed var(--color-control-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-surface);
+    padding: 24px 16px;
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
   }
 
-  input.input-error, textarea.input-error {
-    border-color: var(--color-danger);
+  .custom-dropzone:hover {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-text);
   }
 
-  .field-error {
-    font-size: 0.775rem;
-    color: var(--color-danger);
+  .custom-dropzone.drag-over {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-focus);
+    border-style: solid;
   }
 
-  .field-hint {
+  .dropzone-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-muted);
+  }
+
+  .dropzone-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn-select-file {
+    color: var(--color-text);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: underline;
+  }
+
+  .dropzone-hint {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+  }
+
+  .dropzone-specs {
     font-size: 0.75rem;
     color: var(--color-text-muted);
   }
 
-  .file-preview-list {
+  /* Selected Files List */
+  .selected-files-list {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
-    margin-top: 6px;
+    margin-top: 8px;
   }
 
-  .file-chip {
-    display: inline-flex;
+  .file-item-row {
+    display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
+    gap: 12px;
+    padding: 10px 14px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    font-size: 0.8rem;
   }
 
-  .file-chip-name {
-    font-weight: 500;
+  .file-preview-slot {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--color-bg);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
   }
 
-  .file-chip-size {
+  .file-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .file-doc-icon {
     color: var(--color-text-muted);
   }
 
-  .btn-remove-chip {
+  .file-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .file-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .btn-remove-file {
     background: none;
-    border: none;
+    border: 1px solid var(--color-control-border);
+    border-radius: var(--radius-sm);
     color: var(--color-danger);
-    font-size: 1rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 6px 12px;
     cursor: pointer;
-    line-height: 1;
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.12s ease;
+  }
+
+  .btn-remove-file:hover:not(:disabled) {
+    background-color: var(--color-danger-bg);
   }
 
   .form-actions {
     display: flex;
+    align-items: center;
     gap: 12px;
     margin-top: 8px;
-  }
-
-  .btn {
-    padding: 10px 18px;
-    border-radius: var(--radius-sm);
-    font-weight: 600;
-    font-size: 0.9rem;
-    cursor: pointer;
-    border: none;
-    transition: background-color 0.15s;
-  }
-
-  .btn-primary {
-    background-color: var(--color-primary);
-    color: var(--color-primary-text);
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background-color: var(--color-primary-hover);
-  }
-
-  .btn-secondary {
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background-color: var(--color-surface-hover);
-  }
-
-  .btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .alert {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 0.85rem;
-    margin-bottom: 16px;
-  }
-
-  .alert-error {
-    background-color: rgba(220, 38, 38, 0.1);
-    color: var(--color-danger);
-    border: 1px solid rgba(220, 38, 38, 0.2);
+    flex-wrap: wrap;
   }
 </style>

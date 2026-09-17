@@ -1,20 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import ThemeToggle from './ThemeToggle.svelte';
-  import HealthPanel from './HealthPanel.svelte';
   import Register from './Register.svelte';
   import Login from './Login.svelte';
   import TicketList from './TicketList.svelte';
   import CreateTicket from './CreateTicket.svelte';
   import TicketDetail from './TicketDetail.svelte';
   import Dashboard from './Dashboard.svelte';
+  import { parseRoute, navigate, getDefaultPathForRole, type Route } from './router';
   import type { User } from '../server/auth';
-  import type { Ticket } from '../server/tickets';
 
   let currentUser = $state<User | null>(null);
   let isCheckingAuth = $state(true);
-  let currentView = $state<'overview' | 'register' | 'login' | 'tickets' | 'create-ticket' | 'ticket-detail' | 'dashboard'>('overview');
-  let selectedTicket = $state<Ticket | null>(null);
+  let currentRoute = $state<Route>({ view: 'login' });
+  let isDrawerOpen = $state(false);
+  let menuButtonEl = $state<HTMLButtonElement | null>(null);
+  let drawerEl = $state<HTMLElement | null>(null);
 
   async function checkAuth() {
     try {
@@ -29,355 +30,302 @@
       currentUser = null;
     } finally {
       isCheckingAuth = false;
+      syncRouteWithAuth();
+    }
+  }
+
+  function syncRouteWithAuth() {
+    const route = parseRoute(window.location.pathname);
+    if (!currentUser) {
+      if (route.view !== 'login' && route.view !== 'register') {
+        navigate('/login', { replace: true });
+        currentRoute = { view: 'login' };
+      } else {
+        currentRoute = route;
+      }
+    } else {
+      if (route.view === 'login' || route.view === 'register' || route.view === 'unknown') {
+        const dest = getDefaultPathForRole(currentUser.role);
+        navigate(dest, { replace: true });
+        currentRoute = parseRoute(dest);
+      } else if (route.view === 'it-queue' && currentUser.role === 'User') {
+        navigate('/tickets', { replace: true });
+        currentRoute = { view: 'tickets' };
+      } else {
+        currentRoute = route;
+      }
     }
   }
 
   async function handleLogout() {
+    closeDrawer();
     try {
       await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } });
     } finally {
       currentUser = null;
-      currentView = 'overview';
+      navigate('/login', { replace: true });
+      currentRoute = { view: 'login' };
     }
   }
 
+  function toggleDrawer() {
+    if (isDrawerOpen) {
+      closeDrawer();
+    } else {
+      openDrawer();
+    }
+  }
+
+  function openDrawer() {
+    isDrawerOpen = true;
+    document.body.style.overflow = 'hidden';
+    // Focus first focusable item in drawer
+    setTimeout(() => {
+      const firstFocusable = drawerEl?.querySelector<HTMLElement>('a, button');
+      firstFocusable?.focus();
+    }, 50);
+  }
+
+  function closeDrawer() {
+    if (!isDrawerOpen) return;
+    isDrawerOpen = false;
+    document.body.style.overflow = '';
+    menuButtonEl?.focus();
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && isDrawerOpen) {
+      closeDrawer();
+    }
+  }
+
+  function handleGlobalClick(e: MouseEvent) {
+    const target = e.target as HTMLElement | null;
+    const anchor = target?.closest('a');
+    if (!anchor) return;
+
+    if (
+      anchor.target ||
+      anchor.hasAttribute('download') ||
+      anchor.getAttribute('rel')?.includes('external') ||
+      e.ctrlKey || e.metaKey || e.shiftKey || e.altKey ||
+      e.defaultPrevented ||
+      e.button !== 0
+    ) {
+      return;
+    }
+
+    const href = anchor.getAttribute('href');
+    if (!href || href.startsWith('http:') || href.startsWith('https:') || href.startsWith('#') || href.startsWith('/api/')) {
+      return;
+    }
+
+    e.preventDefault();
+    closeDrawer();
+    navigate(href);
+  }
+
   onMount(() => {
+    currentRoute = parseRoute(window.location.pathname);
+
+    const onPopState = () => {
+      closeDrawer();
+      syncRouteWithAuth();
+    };
+
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('keydown', handleKeydown);
+    document.addEventListener('click', handleGlobalClick);
+
     void checkAuth();
+
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('keydown', handleKeydown);
+      document.removeEventListener('click', handleGlobalClick);
+      document.body.style.overflow = '';
+    };
   });
 </script>
 
 <a class="skip-link" href="#main">Lewati ke konten utama</a>
-<div class="workspace">
-  <aside class="sidebar" aria-label="Workspace">
-    <a class="brand" href="/" aria-label="IT Service Desk — beranda" onclick={(e) => { e.preventDefault(); currentView = 'overview'; }}>
-      <span class="brand-mark" aria-hidden="true">IT<span class="brand-dot">.</span></span>
-      <span><strong>Service Desk</strong><small>INTERNAL WORKSPACE</small></span>
-    </a>
 
-    <nav aria-label="Navigasi utama">
-      <p class="nav-label">WORKSPACE</p>
-      <button
-        type="button"
-        class="nav-link"
-        class:active={currentView === 'overview'}
-        aria-current={currentView === 'overview' ? 'page' : undefined}
-        onclick={() => (currentView = 'overview')}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
-          <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-        </svg>
-        Ringkasan
-      </button>
+{#if isCheckingAuth}
+  <div class="unauth-shell">
+    <header class="unauth-topbar">
+      <span class="brand-title">IT Service Desk</span>
+      <ThemeToggle />
+    </header>
+    <main id="main" class="unauth-main" tabindex="-1">
+      <div class="loading-state">
+        <p>Memeriksa sesi pengguna…</p>
+      </div>
+    </main>
+  </div>
+{:else if !currentUser}
+  <!-- Unauthenticated Visitor Shell -->
+  <div class="unauth-shell">
+    <header class="unauth-topbar">
+      <a href="/login" class="brand-title">IT Service Desk</a>
+      <ThemeToggle />
+    </header>
+    <main id="main" class="unauth-main" tabindex="-1">
+      {#if currentRoute.view === 'register'}
+        <Register onSuccess={() => syncRouteWithAuth()} />
+      {:else}
+        <Login onSuccess={(user) => {
+          currentUser = user;
+          const dest = getDefaultPathForRole(user.role);
+          navigate(dest, { replace: true });
+          currentRoute = parseRoute(dest);
+        }} />
+      {/if}
+    </main>
+  </div>
+{:else}
+  <!-- Authenticated Shell (100dvh, overflow: hidden) -->
+  <div class="auth-shell">
+    {#if isDrawerOpen}
+      <div
+        class="drawer-backdrop"
+        onclick={closeDrawer}
+        role="presentation"
+        aria-hidden="true"
+      ></div>
+    {/if}
 
-      {#if currentUser}
+    <aside
+      bind:this={drawerEl}
+      class="app-sidebar"
+      class:drawer-open={isDrawerOpen}
+      aria-label="Menu navigasi"
+    >
+      <div class="brand-header">
+        <a
+          href={getDefaultPathForRole(currentUser.role)}
+          class="brand-title"
+          onclick={() => closeDrawer()}
+        >
+          IT Service Desk
+        </a>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Menu utama">
         {#if currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin'}
-          <p class="nav-label" style="margin-top: 16px;">OPERASIONAL</p>
-          <button
-            type="button"
-            class="nav-link"
-            class:active={currentView === 'dashboard'}
-            aria-current={currentView === 'dashboard' ? 'page' : undefined}
-            onclick={() => (currentView = 'dashboard')}
+          <a
+            href="/it/queue"
+            class="nav-item"
+            class:active={currentRoute.view === 'it-queue'}
+            aria-current={currentRoute.view === 'it-queue' ? 'page' : undefined}
+            onclick={() => closeDrawer()}
           >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
-            Dashboard Antrean IT
-          </button>
+            Antrean IT
+          </a>
         {/if}
 
-        <p class="nav-label" style="margin-top: 16px;">LAYANAN TIKET</p>
-        <button
-          type="button"
-          class="nav-link"
-          class:active={currentView === 'tickets' || currentView === 'ticket-detail'}
-          aria-current={currentView === 'tickets' ? 'page' : undefined}
-          onclick={() => { currentView = 'tickets'; selectedTicket = null; }}
+        <a
+          href="/tickets"
+          class="nav-item"
+          class:active={currentRoute.view === 'tickets' || currentRoute.view === 'ticket-detail' || currentRoute.view === 'tickets-new'}
+          aria-current={currentRoute.view === 'tickets' ? 'page' : undefined}
+          onclick={() => closeDrawer()}
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
           </svg>
           Tiket Saya
-        </button>
+        </a>
+      </nav>
 
-        <button
-          type="button"
-          class="nav-link"
-          class:active={currentView === 'create-ticket'}
-          aria-current={currentView === 'create-ticket' ? 'page' : undefined}
-          onclick={() => (currentView = 'create-ticket')}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Buat Tiket Baru
-        </button>
-      {:else if !isCheckingAuth}
-        <p class="nav-label" style="margin-top: 16px;">AKUN</p>
-        <button
-          type="button"
-          class="nav-link"
-          class:active={currentView === 'login'}
-          aria-current={currentView === 'login' ? 'page' : undefined}
-          onclick={() => (currentView = 'login')}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" />
-          </svg>
-          Masuk
-        </button>
-
-        <button
-          type="button"
-          class="nav-link"
-          class:active={currentView === 'register'}
-          aria-current={currentView === 'register' ? 'page' : undefined}
-          onclick={() => (currentView = 'register')}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
-          </svg>
-          Daftar Akun
-        </button>
-      {/if}
-    </nav>
-
-    {#if currentUser}
-      <div class="user-profile-widget">
-        <div class="user-info">
-          <span class="user-name"><strong>{currentUser.username}</strong> ({currentUser.nik})</span>
-          <span class="user-role badge-role">{currentUser.role}</span>
+      <div class="sidebar-user">
+        <div class="user-profile-info">
+          <span class="user-display-name" title={currentUser.username}>{currentUser.username}</span>
+          <span class="badge-role badge-neutral">{currentUser.role}</span>
         </div>
-        <button type="button" class="btn-logout" onclick={handleLogout} title="Keluar dari akun">
+        <button type="button" class="btn-logout" onclick={handleLogout}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
           Keluar
         </button>
       </div>
-    {:else}
-      <div class="sidebar-note">
-        <span class="version-label">MVP · DALAM PENGEMBANGAN</span>
-        <p>Workspace internal untuk pelaporan dan penanganan kendala IT.</p>
-      </div>
-    {/if}
-  </aside>
+    </aside>
 
-  <div class="workspace-body">
-    <header class="topbar">
-      <div class="breadcrumb">
-        <span>Workspace</span>
-        <span aria-hidden="true">/</span>
-        <strong>
-          {currentView === 'overview'
-            ? 'Ringkasan'
-            : currentView === 'dashboard'
-            ? 'Dashboard IT'
-            : currentView === 'register'
-            ? 'Daftar Akun'
-            : currentView === 'login'
-            ? 'Masuk'
-            : currentView === 'tickets'
-            ? 'Tiket Saya'
-            : currentView === 'create-ticket'
-            ? 'Buat Tiket'
-            : selectedTicket?.ticketNumber || 'Detail Tiket'}
-        </strong>
-      </div>
-      <ThemeToggle />
-    </header>
+    <div class="app-workspace">
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button
+            bind:this={menuButtonEl}
+            type="button"
+            class="btn-mobile-menu"
+            aria-expanded={isDrawerOpen}
+            aria-label={isDrawerOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
+            onclick={toggleDrawer}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+            <span>Menu</span>
+          </button>
 
-    <main id="main" tabindex="-1">
-      {#if currentView === 'overview'}
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">IT SERVICE DESK</p>
-            <h1>Ringkasan workspace</h1>
-            <p class="page-description">Fondasi layanan IT, dari laporan pertama hingga solusi terdokumentasi.</p>
-          </div>
-          <span class="stage-label">Tahap fondasi</span>
+          <!-- Real Navigable Breadcrumb: only on subpages -->
+          {#if currentRoute.view === 'tickets-new'}
+            <nav aria-label="Breadcrumb">
+              <ol class="nav-breadcrumb">
+                <li><a href="/tickets">Tiket Saya</a></li>
+                <li aria-hidden="true">/</li>
+                <li aria-current="page"><strong>Buat Tiket</strong></li>
+              </ol>
+            </nav>
+          {:else if currentRoute.view === 'ticket-detail'}
+            <nav aria-label="Breadcrumb">
+              <ol class="nav-breadcrumb">
+                <li><a href="/tickets">Tiket Saya</a></li>
+                <li aria-hidden="true">/</li>
+                <li aria-current="page"><strong class="tabular-nums">{currentRoute.ticketNumber}</strong></li>
+              </ol>
+            </nav>
+          {/if}
         </div>
 
-        {#if currentUser}
-          <div class="welcome-banner">
-            <div>
-              <h3>Selamat datang, {currentUser.username}!</h3>
-              <p>Role Anda: <strong>{currentUser.role}</strong>. Akses fitur tiket melalui navigasi sebelah kiri.</p>
-            </div>
-            {#if currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin'}
-              <button type="button" class="btn btn-primary" onclick={() => (currentView = 'dashboard')}>
-                Buka Dashboard IT
-              </button>
-            {:else}
-              <button type="button" class="btn btn-primary" onclick={() => (currentView = 'create-ticket')}>
-                Laporkan Kendala
-              </button>
-            {/if}
-          </div>
+        <ThemeToggle />
+      </header>
+
+      <main id="main" tabindex="-1">
+        {#if currentRoute.view === 'it-queue' && (currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin')}
+          <Dashboard
+            {currentUser}
+            onSelectTicket={(ticket) => navigate(`/tickets/${ticket.ticketNumber}`)}
+          />
+        {:else if currentRoute.view === 'tickets'}
+          <TicketList
+            canViewAll={currentUser.role !== 'User'}
+            onCreateNewTicket={() => navigate('/tickets/new')}
+            onSelectTicket={(ticket) => navigate(`/tickets/${ticket.ticketNumber}`)}
+          />
+        {:else if currentRoute.view === 'tickets-new'}
+          <CreateTicket
+            onCancel={() => navigate('/tickets')}
+            onCreated={(newTicket) => navigate(`/tickets/${newTicket.ticketNumber}`)}
+          />
+        {:else if currentRoute.view === 'ticket-detail'}
+          <TicketDetail
+            ticketId={currentRoute.ticketNumber}
+            currentUser={currentUser}
+            onBack={() => navigate(currentUser?.role === 'User' ? '/tickets' : '/it/queue')}
+          />
         {/if}
-
-        <HealthPanel />
-
-        <section class="panel" aria-labelledby="workflow-title">
-          <div class="section-heading">
-            <div><p class="eyebrow">ALUR LAYANAN</p><h2 id="workflow-title">Setiap kendala, progres yang jelas.</h2></div>
-            <span class="secondary-label">Rencana fitur</span>
-          </div>
-          <ol class="workflow">
-            <li><span class="step-number">01</span><h3>Open</h3><p>Laporkan kendala, pilih prioritas, dan sertakan bukti pendukung.</p></li>
-            <li><span class="step-number">02</span><h3>In Progress</h3><p>Tim IT menangani tiket dan berdiskusi dengan Anda dalam satu ruang.</p></li>
-            <li><span class="step-number">03</span><h3>Closed</h3><p>Solusi dicatat. Percakapan dan lampiran tersimpan sebagai histori.</p></li>
-          </ol>
-        </section>
-      {:else if currentView === 'dashboard' && currentUser}
-        <Dashboard
-          {currentUser}
-          onSelectTicket={(t) => {
-            selectedTicket = t;
-            currentView = 'ticket-detail';
-          }}
-        />
-      {:else if currentView === 'login'}
-        <Login
-          onSuccess={(user) => {
-            currentUser = user;
-            currentView = user.role === 'User' ? 'tickets' : 'dashboard';
-          }}
-          onSwitchToRegister={() => (currentView = 'register')}
-        />
-      {:else if currentView === 'register'}
-        <Register
-          onSuccess={() => (currentView = 'login')}
-          onSwitchToLogin={() => (currentView = 'login')}
-        />
-      {:else if currentView === 'tickets'}
-        <TicketList
-          canViewAll={Boolean(currentUser && currentUser.role !== 'User')}
-          onCreateNewTicket={() => (currentView = 'create-ticket')}
-          onSelectTicket={(t) => {
-            selectedTicket = t;
-            currentView = 'ticket-detail';
-          }}
-        />
-      {:else if currentView === 'create-ticket'}
-        <CreateTicket
-          onCancel={() => (currentView = 'tickets')}
-          onCreated={(newTicket) => {
-            selectedTicket = newTicket;
-            currentView = 'ticket-detail';
-          }}
-        />
-      {:else if currentView === 'ticket-detail' && selectedTicket && currentUser}
-        <TicketDetail
-          ticketId={selectedTicket.id}
-          {currentUser}
-          onBack={() => {
-            selectedTicket = null;
-            currentView = currentUser?.role === 'User' ? 'tickets' : 'dashboard';
-          }}
-        />
-      {/if}
-
-      <footer class="page-footer"><span>IT Service Desk</span><span>Corporate workspace · v0.1</span></footer>
-    </main>
+      </main>
+    </div>
   </div>
-</div>
-
-<style>
-  .user-profile-widget {
-    margin-top: auto;
-    padding: 12px;
-    background-color: var(--color-bg);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .user-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .user-name {
-    font-size: 0.85rem;
-    color: var(--color-text);
-  }
-
-  .badge-role {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--color-primary);
-    background-color: var(--color-surface);
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid var(--color-border);
-    align-self: flex-start;
-  }
-
-  .btn-logout {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 6px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    color: var(--color-danger);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background-color 0.15s;
-  }
-
-  .btn-logout:hover {
-    background-color: var(--color-surface-hover);
-  }
-
-  .welcome-banner {
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-left: 4px solid var(--color-primary);
-    border-radius: var(--radius-sm);
-    padding: 16px 20px;
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .welcome-banner h3 {
-    font-size: 1rem;
-    margin-bottom: 2px;
-  }
-
-  .welcome-banner p {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-  }
-
-  .btn {
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    font-weight: 600;
-    font-size: 0.85rem;
-    cursor: pointer;
-    border: none;
-    transition: background-color 0.15s;
-    white-space: nowrap;
-  }
-
-  .btn-primary {
-    background-color: var(--color-primary);
-    color: var(--color-primary-text);
-  }
-
-  .btn-primary:hover {
-    background-color: var(--color-primary-hover);
-  }
-</style>
+{/if}

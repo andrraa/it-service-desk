@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { navigate } from './router';
   import { modal } from './modal';
   import type { Ticket, TicketPriority } from '../server/tickets';
   import type { User } from '../server/auth';
@@ -9,7 +10,7 @@
     onSelectTicket?: (ticket: Ticket) => void;
   }
 
-  let { onSelectTicket }: Props = $props();
+  let { currentUser, onSelectTicket }: Props = $props();
 
   interface Summary {
     openCount: number;
@@ -19,10 +20,10 @@
   }
 
   let summary = $state<Summary | null>(null);
-
   let queue = $state<Ticket[]>([]);
   let isLoading = $state(true);
   let errorMessage = $state('');
+  let claimError = $state('');
 
   // Filters
   let statusFilter = $state<'all' | 'Open' | 'In Progress'>('all');
@@ -43,10 +44,22 @@
   let reprioritizeError = $state('');
   let isUpdatingPriority = $state(false);
 
+  function formatAge(createdAt: string): string {
+    const diffMs = Date.now() - new Date(createdAt).getTime();
+    const minutes = Math.max(0, Math.floor(diffMs / 60000));
+    if (minutes < 60) return `${minutes} menit`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMins = minutes % 60;
+    if (hours < 24) return `${hours} jam ${remainingMins} mnt`;
+    const days = Math.floor(hours / 24);
+    return `${days} hari ${hours % 24} jam`;
+  }
+
   async function fetchDashboardData(nextPage = 1) {
     const requestGeneration = ++generation;
     isLoading = true;
     errorMessage = '';
+    claimError = '';
     try {
       // 1. Fetch summary
       const sumRes = await fetch('/api/dashboard/summary');
@@ -74,7 +87,7 @@
       page = qData.pagination.page;
       hasMore = qData.pagination.hasMore;
     } catch (err: any) {
-      if (requestGeneration === generation) errorMessage = err.message || 'Gagal memuat data dashboard.';
+      if (requestGeneration === generation) errorMessage = err.message || 'Gagal memuat antrean tiket.';
     } finally {
       if (requestGeneration === generation) isLoading = false;
     }
@@ -82,6 +95,7 @@
 
   async function handleClaim(ticket: Ticket, e: Event) {
     e.stopPropagation();
+    claimError = '';
     try {
       const res = await fetch(`/api/tickets/${ticket.id}/claim`, {
         method: 'POST',
@@ -93,13 +107,14 @@
 
       const data: any = await res.json();
       if (!res.ok) {
-        alert(data.error?.message || 'Gagal mengambil tiket.');
+        claimError = data.error?.message || 'Tiket sudah diambil oleh petugas lain.';
+        await fetchDashboardData();
         return;
       }
 
       await fetchDashboardData();
     } catch {
-      alert('Terjadi kesalahan jaringan saat mengambil tiket.');
+      claimError = 'Terjadi kesalahan jaringan saat mengambil tiket.';
     }
   }
 
@@ -114,7 +129,7 @@
   async function submitPriorityChange() {
     if (!ticketToReprioritize) return;
     if (!priorityReason.trim() || priorityReason.trim().length < 5) {
-      reprioritizeError = 'Alasan perubahan prioritas wajib diisi (minimal 5 karakter).';
+      reprioritizeError = 'Alasan perubahan prioritas wajib diisi minimal 5 karakter.';
       return;
     }
 
@@ -127,12 +142,12 @@
           'Content-Type': 'application/json',
           'X-Requested-With': 'fetch',
         },
-        body: JSON.stringify({ priority: newPriority, reason: priorityReason }),
+        body: JSON.stringify({ priority: newPriority, reason: priorityReason.trim() }),
       });
 
       const data: any = await res.json();
       if (!res.ok) {
-        reprioritizeError = data.error?.message || 'Gagal memperbarui prioritas.';
+        reprioritizeError = data.error?.message || 'Gagal mengubah prioritas.';
         return;
       }
 
@@ -145,76 +160,111 @@
     }
   }
 
+  function handleOpenTicket(e: MouseEvent, ticket: Ticket) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (onSelectTicket) {
+      onSelectTicket(ticket);
+    } else {
+      navigate(`/tickets/${ticket.ticketNumber}`);
+    }
+  }
+
+  function resetFilters() {
+    statusFilter = 'all';
+    priorityFilter = 'all';
+    unassignedOnly = false;
+    assignedToMe = false;
+    searchQuery = '';
+    assignee = '';
+    void fetchDashboardData(1);
+  }
+
   onMount(() => {
     void fetchDashboardData();
   });
 </script>
 
-<div class="dashboard-container">
-  <div class="page-heading">
+<div class="dashboard-view">
+  <div class="page-header">
     <div>
-      <p class="eyebrow">OPERASIONAL IT</p>
-      <h1>Dashboard Penanganan Tiket</h1>
-      <p class="page-description">Antrean kerja prioritas terdepan & FIFO stabil untuk seluruh tiket aktif.</p>
+      <h1>Antrean IT</h1>
+      <p class="page-desc">Antrean kerja prioritas terdepan & FIFO stabil untuk seluruh kendala aktif.</p>
     </div>
     <button type="button" class="btn btn-secondary" onclick={() => fetchDashboardData()}>
-      Segarkan Antrean
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M23 4v6h-6" /><path d="M1 20v-6h6" />
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+      </svg>
+      <span>Segarkan</span>
     </button>
   </div>
 
-  <!-- Metric Cards -->
-  <div class="metrics-grid">
-    <div class="metric-card">
-      <span class="metric-label">Tiket Baru (Open)</span>
-      <strong class="metric-value">{summary?.openCount ?? '—'}</strong>
-      <span class="metric-sub">Menunggu diambil</span>
+  <!-- Single Summary Strip (4 columns desktop, 2x2 mobile) -->
+  <div class="summary-strip" aria-label="Ringkasan Antrean">
+    <div class="summary-item">
+      <span class="summary-label">Tiket Open</span>
+      <strong class="summary-val tabular-nums">{summary ? summary.openCount : '—'}</strong>
+      <span class="summary-sub">Menunggu diambil</span>
     </div>
-    <div class="metric-card">
-      <span class="metric-label">In Progress</span>
-      <strong class="metric-value">{summary?.inProgressCount ?? '—'}</strong>
-      <span class="metric-sub">Sedang ditangani IT</span>
+    <div class="summary-item">
+      <span class="summary-label">In Progress</span>
+      <strong class="summary-val tabular-nums">{summary ? summary.inProgressCount : '—'}</strong>
+      <span class="summary-sub">Sedang ditangani</span>
     </div>
-    <div class="metric-card metric-critical">
-      <span class="metric-label">Aktif Critical</span>
-      <strong class="metric-value">{summary?.criticalActiveCount ?? '—'}</strong>
-      <span class="metric-sub">Urgensi tertinggi</span>
+    <div class="summary-item summary-critical">
+      <span class="summary-label">Aktif Critical</span>
+      <strong class="summary-val tabular-nums">{summary ? summary.criticalActiveCount : '—'}</strong>
+      <span class="summary-sub">Urgensi tertinggi</span>
     </div>
-    <div class="metric-card">
-      <span class="metric-label">Selesai Hari Ini</span>
-      <strong class="metric-value">{summary?.closedTodayCount ?? '—'}</strong>
-      <span class="metric-sub">Tiket Closed</span>
+    <div class="summary-item">
+      <span class="summary-label">Closed Hari Ini</span>
+      <strong class="summary-val tabular-nums">{summary ? summary.closedTodayCount : '—'}</strong>
+      <span class="summary-sub">Telah diselesaikan</span>
     </div>
   </div>
 
-  <!-- Filters Bar -->
-  <div class="filter-panel">
-    <form class="filter-row" onsubmit={(event) => { event.preventDefault(); void fetchDashboardData(); }}>
-      <div class="filter-group">
-        <label for="queue-search">Cari nomor atau judul tiket</label>
-        <input id="queue-search" type="search" bind:value={searchQuery} />
+  <!-- Filters Toolbar -->
+  <div class="toolbar-panel">
+    <form class="search-form" onsubmit={(e) => { e.preventDefault(); void fetchDashboardData(1); }}>
+      <div class="search-input-wrapper">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input
+          id="queue-search"
+          type="search"
+          aria-label="Cari nomor atau judul tiket"
+          placeholder="Cari nomor atau judul…"
+          bind:value={searchQuery}
+        />
       </div>
       <button type="submit" class="btn btn-secondary">Cari</button>
     </form>
-    <div class="filter-row">
-      <div class="filter-group">
-        <label for="queue-assignee">Penanggung jawab</label>
-        <select id="queue-assignee" bind:value={assignee} onchange={() => fetchDashboardData()}>
-          <option value="">Semua petugas</option>
-          {#each assignees as person}<option value={String(person.id)}>{person.username}</option>{/each}
+
+    <div class="filter-controls">
+      <div class="filter-item">
+        <label for="queue-assignee" class="sr-only">Penanggung Jawab</label>
+        <select id="queue-assignee" bind:value={assignee} onchange={() => fetchDashboardData(1)}>
+          <option value="">Semua Petugas</option>
+          {#each assignees as person}
+            <option value={String(person.id)}>{person.username}</option>
+          {/each}
         </select>
       </div>
-      <div class="filter-group">
-        <label for="f-status">Status</label>
-        <select id="f-status" bind:value={statusFilter} onchange={() => fetchDashboardData()}>
-          <option value="all">Semua Aktif (Open & In Progress)</option>
+
+      <div class="filter-item">
+        <label for="queue-status" class="sr-only">Filter Status</label>
+        <select id="queue-status" bind:value={statusFilter} onchange={() => fetchDashboardData(1)}>
+          <option value="all">Semua Aktif</option>
           <option value="Open">Hanya Open</option>
           <option value="In Progress">Hanya In Progress</option>
         </select>
       </div>
 
-      <div class="filter-group">
-        <label for="f-priority">Prioritas</label>
-        <select id="f-priority" bind:value={priorityFilter} onchange={() => fetchDashboardData()}>
+      <div class="filter-item">
+        <label for="queue-priority" class="sr-only">Filter Prioritas</label>
+        <select id="queue-priority" bind:value={priorityFilter} onchange={() => fetchDashboardData(1)}>
           <option value="all">Semua Prioritas</option>
           <option value="Critical">Critical</option>
           <option value="High">High</option>
@@ -223,57 +273,78 @@
         </select>
       </div>
 
-      <div class="checkbox-group">
-        <label>
-          <input type="checkbox" bind:checked={unassignedOnly} onchange={() => fetchDashboardData()} />
-          <span>Belum Diambil</span>
-        </label>
-        <label>
-          <input type="checkbox" bind:checked={assignedToMe} onchange={() => fetchDashboardData()} />
-          <span>Ditangani Saya</span>
-        </label>
-      </div>
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={unassignedOnly} onchange={() => fetchDashboardData(1)} />
+        <span>Belum Diambil</span>
+      </label>
+
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={assignedToMe} onchange={() => fetchDashboardData(1)} />
+        <span>Ditangani Saya</span>
+      </label>
+
+      <button type="button" class="btn btn-secondary" onclick={resetFilters}>
+        Reset
+      </button>
     </div>
   </div>
+
+  {#if claimError}
+    <div class="alert alert-error" role="alert">
+      <span>{claimError}</span>
+    </div>
+  {/if}
 
   {#if errorMessage}
     <div class="alert alert-error" role="alert">
       <span>{errorMessage}</span>
+      <button type="button" class="btn-link" onclick={() => fetchDashboardData()}>Coba lagi</button>
     </div>
   {/if}
 
-  <!-- Queue Table -->
   {#if isLoading}
     <div class="loading-state">
-      <p>Memuat antrean operasional…</p>
+      <p>Memuat antrean tiket…</p>
     </div>
-  {:else if !errorMessage && queue.length === 0}
+  {:else if queue.length === 0}
     <div class="empty-state">
-      <h3>Antrean Kosong</h3>
-      <p>Tidak ada tiket aktif yang memerlukan penanganan sesuai filter yang dipilih.</p>
+      <p class="empty-state-title">Antrean Kosong</p>
+      <p class="empty-state-desc">Tidak ada tiket aktif yang memerlukan penanganan sesuai filter yang dipilih.</p>
+      <button type="button" class="btn btn-secondary" onclick={resetFilters}>
+        Reset Filter
+      </button>
     </div>
-  {:else if queue.length > 0}
-    <div class="table-card">
+  {:else}
+    <!-- Desktop Table (≥1024px) -->
+    <div class="table-container desktop-only">
       <table class="queue-table">
         <thead>
           <tr>
-            <th>Nomor</th>
-            <th>Pelapor</th>
-            <th>Judul</th>
-            <th>Prioritas</th>
-            <th>Status</th>
-            <th>Penanggung Jawab</th>
-            <th>Waktu Dibuat</th>
-            <th>Aksi</th>
+            <th scope="col">Nomor & Judul</th>
+            <th scope="col">Pelapor</th>
+            <th scope="col">Prioritas</th>
+            <th scope="col">Status</th>
+            <th scope="col">Penanggung Jawab</th>
+            <th scope="col">Waktu & Usia</th>
+            <th scope="col">Aksi</th>
           </tr>
         </thead>
         <tbody>
           {#each queue as ticket}
             <tr>
-              <td class="cell-number"><strong>{ticket.ticketNumber}</strong></td>
-              <td>{ticket.creatorUsername} ({ticket.creatorNik})</td>
-              <td class="cell-title">
-                <button class="ticket-link" type="button" onclick={() => onSelectTicket?.(ticket)}>{ticket.title}</button>
+              <td class="cell-primary">
+                <span class="ticket-number tabular-nums">{ticket.ticketNumber}</span>
+                <a
+                  href={`/tickets/${ticket.ticketNumber}`}
+                  class="ticket-title"
+                  onclick={(e) => handleOpenTicket(e, ticket)}
+                >
+                  {ticket.title}
+                </a>
+              </td>
+              <td>
+                <span class="user-text"><strong>{ticket.creatorUsername}</strong></span>
+                <span class="user-sub tabular-nums">{ticket.creatorNik}</span>
               </td>
               <td>
                 <span class="badge-priority priority-{ticket.priority.toLowerCase()}">
@@ -285,15 +356,34 @@
                   {ticket.status}
                 </span>
               </td>
-              <td>{ticket.assigneeUsername || '— Belum ada —'}</td>
-              <td class="cell-time">{new Date(ticket.createdAt).toLocaleString('id-ID')}<br /><small>Usia: {Math.max(0, Math.floor((Date.now() - new Date(ticket.createdAt).getTime()) / 60000))} menit</small></td>
+              <td class="cell-muted">
+                {#if ticket.assigneeId === currentUser.id}
+                  <strong>{ticket.assigneeUsername} (Saya)</strong>
+                {:else}
+                  {ticket.assigneeUsername || '— Belum diambil —'}
+                {/if}
+              </td>
+              <td>
+                <div class="time-age-cell">
+                  <span class="tabular-nums">{new Date(ticket.createdAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                  <span class="age-badge tabular-nums">{formatAge(ticket.createdAt)}</span>
+                </div>
+              </td>
               <td class="cell-actions">
                 {#if ticket.status === 'Open' && !ticket.assigneeId}
-                  <button type="button" class="btn-action btn-claim" onclick={(e) => handleClaim(ticket, e)}>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    onclick={(e) => handleClaim(ticket, e)}
+                  >
                     Ambil Tiket
                   </button>
                 {/if}
-                <button type="button" class="btn-action btn-reprioritize" onclick={(e) => openPriorityModal(ticket, e)}>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  onclick={(e) => openPriorityModal(ticket, e)}
+                >
                   Prioritas
                 </button>
               </td>
@@ -302,32 +392,112 @@
         </tbody>
       </table>
     </div>
-  {/if}
 
-  {#if page > 1 || hasMore}
-    <nav class="filter-row" aria-label="Halaman antrean">
-      <button class="btn btn-secondary" disabled={isLoading || page === 1} onclick={() => fetchDashboardData(page - 1)}>Sebelumnya</button>
-      <span>Halaman {page}</span>
-      <button class="btn btn-secondary" disabled={isLoading || !hasMore} onclick={() => fetchDashboardData(page + 1)}>Berikutnya</button>
-    </nav>
+    <!-- Mobile Cards (<1024px) -->
+    <div class="mobile-only queue-cards-list">
+      {#each queue as ticket}
+        <article class="queue-card">
+          <div class="card-top-row">
+            <span class="ticket-number tabular-nums">{ticket.ticketNumber}</span>
+            <div class="badge-group">
+              <span class="badge-priority priority-{ticket.priority.toLowerCase()}">{ticket.priority}</span>
+              <span class="badge-status status-{ticket.status.toLowerCase().replace(' ', '-')}">{ticket.status}</span>
+            </div>
+          </div>
+
+          <h2 class="card-title">
+            <a
+              href={`/tickets/${ticket.ticketNumber}`}
+              class="ticket-title"
+              onclick={(e) => handleOpenTicket(e, ticket)}
+            >
+              {ticket.title}
+            </a>
+          </h2>
+
+          <div class="card-details-grid">
+            <div class="detail-pair">
+              <span class="label">Pelapor:</span>
+              <span><strong>{ticket.creatorUsername}</strong> ({ticket.creatorNik})</span>
+            </div>
+            <div class="detail-pair">
+              <span class="label">PJ:</span>
+              <span>{ticket.assigneeUsername || 'Belum diambil'}</span>
+            </div>
+            <div class="detail-pair">
+              <span class="label">Usia:</span>
+              <span class="tabular-nums"><strong>{formatAge(ticket.createdAt)}</strong> ({new Date(ticket.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})</span>
+            </div>
+          </div>
+
+          <div class="card-actions-row">
+            {#if ticket.status === 'Open' && !ticket.assigneeId}
+              <button
+                type="button"
+                class="btn btn-primary"
+                onclick={(e) => handleClaim(ticket, e)}
+              >
+                Ambil Tiket
+              </button>
+            {/if}
+            <button
+              type="button"
+              class="btn btn-secondary"
+              onclick={(e) => openPriorityModal(ticket, e)}
+            >
+              Ubah Prioritas
+            </button>
+          </div>
+        </article>
+      {/each}
+    </div>
+
+    {#if page > 1 || hasMore}
+      <nav class="pagination-bar" aria-label="Halaman antrean">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          disabled={isLoading || page === 1}
+          onclick={() => fetchDashboardData(page - 1)}
+        >
+          Sebelumnya
+        </button>
+        <span class="pagination-info">Halaman {page}</span>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          disabled={isLoading || !hasMore}
+          onclick={() => fetchDashboardData(page + 1)}
+        >
+          Berikutnya
+        </button>
+      </nav>
+    {/if}
   {/if}
 
   <!-- Priority Correction Modal -->
   {#if ticketToReprioritize}
-    <dialog class="modal-card" use:modal aria-labelledby="modal-prio-title"
-      oncancel={(event) => { if (isUpdatingPriority) event.preventDefault(); else ticketToReprioritize = null; }}>
-        <h3 id="modal-prio-title">Koreksi Tingkat Prioritas</h3>
-        <p class="modal-sub">
-          Tiket: <strong>{ticketToReprioritize.ticketNumber}</strong> — {ticketToReprioritize.title}
-        </p>
+    <dialog
+      class="modal-card"
+      use:modal
+      aria-labelledby="modal-prio-title"
+      oncancel={(e) => { if (isUpdatingPriority) e.preventDefault(); else ticketToReprioritize = null; }}
+    >
+      <h2 id="modal-prio-title">Koreksi Tingkat Prioritas</h2>
+      <p class="field-hint" style="margin-top: 4px;">
+        Tiket: <strong class="tabular-nums">{ticketToReprioritize.ticketNumber}</strong> — {ticketToReprioritize.title}
+      </p>
 
-        {#if reprioritizeError}
-          <div class="alert alert-error" role="alert">{reprioritizeError}</div>
-        {/if}
+      {#if reprioritizeError}
+        <div class="alert alert-error" role="alert" style="margin-top: 12px;">
+          <span>{reprioritizeError}</span>
+        </div>
+      {/if}
 
-        <div class="form-group" style="margin-top: 14px;">
-          <label for="prio-select">Prioritas Baru</label>
-          <select id="prio-select" bind:value={newPriority}>
+      <form onsubmit={(e) => { e.preventDefault(); void submitPriorityChange(); }} style="margin-top: 16px; display: flex; flex-direction: column; gap: 16px;">
+        <div class="form-group">
+          <label for="queue-prio-select">Prioritas Baru</label>
+          <select id="queue-prio-select" bind:value={newPriority} disabled={isUpdatingPriority}>
             <option value="Critical">Critical — Layanan penting berhenti</option>
             <option value="High">High — Pekerjaan utama terhambat</option>
             <option value="Medium">Medium — Kendala mengganggu, ada alternatif</option>
@@ -335,57 +505,90 @@
           </select>
         </div>
 
-        <div class="form-group" style="margin-top: 14px;">
-          <label for="prio-reason">Alasan Perubahan Prioritas (Wajib Audit)</label>
+        <div class="form-group">
+          <label for="queue-prio-reason">Alasan Perubahan (Wajib Audit)</label>
           <textarea
-            id="prio-reason"
+            id="queue-prio-reason"
             rows="3"
             bind:value={priorityReason}
-            placeholder="Jelaskan alasan penyesuaian urgensi tiket ini secara rinci…"
+            placeholder="Jelaskan alasan penyesuaian prioritas secara rinci…"
+            required
+            disabled={isUpdatingPriority}
           ></textarea>
-          <span class="field-hint">Alasan ini akan tercatat permanen di audit log.</span>
         </div>
 
-        <div class="modal-actions" style="margin-top: 20px;">
-          <button type="button" class="btn btn-primary" disabled={isUpdatingPriority} onclick={submitPriorityChange}>
-            {isUpdatingPriority ? 'Menyimpan…' : 'Simpan Perubahan'}
-          </button>
-          <button type="button" class="btn btn-secondary" disabled={isUpdatingPriority} onclick={() => (ticketToReprioritize = null)}>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px;">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            disabled={isUpdatingPriority}
+            onclick={() => (ticketToReprioritize = null)}
+          >
             Batal
           </button>
+          <button type="submit" class="btn btn-primary" disabled={isUpdatingPriority}>
+            {isUpdatingPriority ? 'Menyimpan…' : 'Simpan Perubahan'}
+          </button>
         </div>
+      </form>
     </dialog>
   {/if}
 </div>
 
 <style>
-  .dashboard-container {
+  .dashboard-view {
+    width: 100%;
+    max-width: none;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 24px;
   }
 
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 16px;
+    flex-wrap: wrap;
   }
 
-  .metric-card {
+  .page-desc {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+  }
+
+  /* Summary Strip: 4 columns desktop, 2x2 mobile */
+  .summary-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: 16px 20px;
+    overflow: hidden;
+  }
+
+  .summary-item {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    padding: 16px 20px;
+    border-right: 1px solid var(--color-border);
   }
 
-  .metric-critical {
-    border-left: 4px solid var(--color-danger);
+  .summary-item:last-child {
+    border-right: none;
   }
 
-  .metric-label {
+  .summary-critical {
+    background-color: var(--color-danger-bg);
+  }
+
+  .summary-critical .summary-val {
+    color: var(--color-danger);
+  }
+
+  .summary-label {
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--color-text-muted);
@@ -393,68 +596,98 @@
     letter-spacing: 0.05em;
   }
 
-  .metric-value {
-    font-size: 1.8rem;
-    line-height: 1.2;
+  .summary-val {
+    font-size: 1.5rem;
+    font-weight: 700;
     color: var(--color-text);
+    line-height: 1.2;
   }
 
-  .metric-sub {
+  .summary-sub {
     font-size: 0.75rem;
     color: var(--color-text-muted);
   }
 
-  .filter-panel {
+  /* Toolbar */
+  .toolbar-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .search-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 480px;
+  }
+
+  .search-input-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-input-wrapper svg {
+    position: absolute;
+    left: 12px;
+    color: var(--color-text-muted);
+    pointer-events: none;
+  }
+
+  .search-input-wrapper input {
+    padding-left: 36px;
+  }
+
+  .filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .filter-item select {
+    min-width: 140px;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 64px 24px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: 16px 20px;
+    gap: 12px;
   }
 
-  .filter-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 16px;
-  }
-
-  .filter-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .filter-group label {
-    font-size: 0.75rem;
+  .empty-state-title {
+    font-size: 1.125rem;
     font-weight: 600;
-    color: var(--color-text-muted);
-  }
-
-  select, textarea, input[type='search'] {
-    padding: 8px 12px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background-color: var(--color-bg);
     color: var(--color-text);
-    font-size: 0.85rem;
   }
 
-  .checkbox-group {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    height: 36px;
+  .empty-state-desc {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    margin-bottom: 8px;
   }
 
-  .checkbox-group label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.85rem;
-    cursor: pointer;
-  }
-
-  .table-card {
+  /* Table */
+  .table-container {
+    width: 100%;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -465,143 +698,213 @@
     width: 100%;
     border-collapse: collapse;
     text-align: left;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
   }
 
-  th {
-    background-color: var(--color-bg);
-    padding: 12px 16px;
+  .queue-table th {
+    padding: 10px 12px;
     font-weight: 600;
     color: var(--color-text-muted);
+    background-color: var(--color-bg);
     border-bottom: 1px solid var(--color-border);
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    white-space: nowrap;
   }
 
-  td {
-    padding: 12px 16px;
+  .queue-table td {
+    padding: 10px 12px;
     border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
   }
 
-  tr:last-child td {
+  .queue-table tr:last-child td {
     border-bottom: none;
   }
 
-  tr:hover td {
+  .queue-table tr:hover td {
     background-color: var(--color-surface-hover);
-    cursor: pointer;
   }
 
-  .cell-number {
-    font-family: monospace;
-    color: var(--color-primary);
+  .cell-primary {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  .cell-title {
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .ticket-number {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  .ticket-title {
+    color: var(--color-text);
+    font-weight: 600;
+    text-decoration: none;
+    word-break: break-word;
+  }
+
+  .ticket-title:hover {
+    color: var(--color-link);
+    text-decoration: underline;
+  }
+
+  .user-text {
+    display: block;
+    color: var(--color-text);
+  }
+
+  .user-sub {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .cell-muted {
+    color: var(--color-text-muted);
     white-space: nowrap;
+  }
+
+  .time-age-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.8125rem;
+  }
+
+  .age-badge {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-weight: 600;
   }
 
   .cell-actions {
     display: flex;
-    gap: 6px;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
   }
 
-  .btn-action {
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    border: 1px solid var(--color-border);
+  .btn-sm {
+    padding: 6px 12px;
+    font-size: 0.8125rem;
+    min-height: 36px;
   }
 
-  .btn-claim {
-    background-color: var(--color-primary);
-    color: var(--color-primary-text);
-    border-color: var(--color-primary);
+  /* Mobile Cards */
+  .queue-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
-  .btn-reprioritize {
-    background-color: var(--color-bg);
-    color: var(--color-text);
-  }
-
-  .badge-priority, .badge-status {
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-
-
-  dialog::backdrop { background: rgb(0 0 0 / 50%); }
-  dialog { margin: auto; color: var(--color-text); max-height: calc(100dvh - 32px); overflow: auto; }
-  .ticket-link { color: var(--color-primary); background: none; border: 0; text-decoration: underline; text-align: left; cursor: pointer; white-space: normal; }
-  form.filter-row { margin-bottom: 16px; }
-
-  .modal-card {
+  .queue-card {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: 24px;
-    max-width: 480px;
-    width: calc(100% - 32px);
-  }
-
-  .modal-sub {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-    margin-top: 4px;
-  }
-
-  .modal-actions {
+    padding: 16px;
     display: flex;
+    flex-direction: column;
     gap: 10px;
   }
 
-  .btn {
-    padding: 8px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    border: none;
+  .card-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
-  .btn-primary {
-    background-color: var(--color-primary);
-    color: var(--color-primary-text);
+  .badge-group {
+    display: flex;
+    gap: 6px;
   }
 
-  .btn-secondary {
-    background-color: var(--color-bg);
-    border: 1px solid var(--color-border);
+  .card-title {
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+
+  .card-details-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8125rem;
+    border-top: 1px solid var(--color-border);
+    padding-top: 8px;
+  }
+
+  .detail-pair {
+    display: flex;
+    gap: 6px;
     color: var(--color-text);
   }
 
-  .empty-state, .loading-state {
-    text-align: center;
-    padding: 40px;
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+  .detail-pair .label {
+    color: var(--color-text-muted);
+    width: 60px;
+    flex-shrink: 0;
+  }
+
+  .card-actions-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+  }
+
+  .pagination-info {
+    font-size: 0.875rem;
     color: var(--color-text-muted);
   }
 
-  .alert {
-    padding: 10px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 0.85rem;
+  .desktop-only {
+    display: block;
   }
 
-  .alert-error {
-    background-color: rgba(220, 38, 38, 0.1);
-    color: var(--color-danger);
-    border: 1px solid rgba(220, 38, 38, 0.2);
+  .mobile-only {
+    display: none;
+  }
+
+  @media (max-width: 1023px) {
+    .desktop-only {
+      display: none;
+    }
+    .mobile-only {
+      display: flex;
+    }
+    .summary-strip {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .summary-item:nth-child(2) {
+      border-right: none;
+    }
+    .summary-item:nth-child(1),
+    .summary-item:nth-child(2) {
+      border-bottom: 1px solid var(--color-border);
+    }
+  }
+
+  @media (max-width: 767px) {
+    .search-form {
+      max-width: none;
+    }
+    .filter-controls {
+      width: 100%;
+    }
+    .filter-item {
+      flex: 1;
+    }
+    .filter-item select {
+      width: 100%;
+      min-width: 0;
+    }
   }
 </style>

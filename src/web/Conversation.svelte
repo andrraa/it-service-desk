@@ -65,15 +65,19 @@
       if (!res.ok) throw new Error('Gagal memuat percakapan tiket.');
       const data = await res.json();
       const incoming: TicketMessage[] = data.messages;
-      const byId = new Map(messages.map(message => [String(message.id), message]));
+      const byId = new Map(messages.map((message) => [String(message.id), message]));
       for (const message of incoming) byId.set(String(message.id), message);
-      messages = [...byId.values()].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+      messages = [...byId.values()].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || (BigInt(a.id) < BigInt(b.id) ? -1 : 1),
+      );
       if (older || !cursor) hasOlder = data.pagination.hasMore;
       if (data.ticketStatus === 'Closed' && !isClosed) onClosed?.();
       remotelyClosed = data.ticketStatus === 'Closed';
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : 'Koneksi terganggu saat memuat pesan.';
-    } finally { isFetching = false; }
+    } finally {
+      isFetching = false;
+    }
   }
 
   async function handleSendMessage(e: Event) {
@@ -92,11 +96,15 @@
         form.append('messageText', textToSend);
         form.append('uploadId', requestId);
         for (const file of selectedFiles) form.append('files', file);
-        // Text and files commit together; attachment-only messages need no placeholder.
-        res = await fetch(`/api/tickets/${ticketId}/attachments`, { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: form });
+        res = await fetch(`/api/tickets/${ticketId}/attachments`, {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'fetch' },
+          body: form,
+        });
       } else {
         res = await fetch(`/api/tickets/${ticketId}/messages`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
           body: JSON.stringify({ messageText: textToSend, requestId }),
         });
       }
@@ -127,63 +135,68 @@
   });
 </script>
 
-<div class="conversation-card">
+<section class="conversation-panel" aria-labelledby="chat-heading">
   <div class="conversation-header">
-    <div class="header-info">
-      <h3>Ruang Percakapan Tiket</h3>
-      <span class="polling-indicator">
-        <span class="pulse-dot" class:active={!isClosed}></span>
-        {isClosed ? 'Tiket Closed (Read-Only)' : 'Pembaruan otomatis setiap 4 detik'}
-      </span>
-    </div>
+    <h2 id="chat-heading">Ruang Chat</h2>
+    <span class="chat-status-indicator">
+      <span class="status-dot" class:active={!isClosed}></span>
+      {isClosed ? 'Tiket Closed' : 'Pembaruan otomatis'}
+    </span>
   </div>
 
   {#if errorMessage}
     <div class="alert alert-error" role="alert">
       <span>{errorMessage}</span>
-      <button type="button" class="btn-retry" onclick={() => fetchMessages()}>Coba lagi</button>
+      <button type="button" class="btn-link" onclick={() => fetchMessages()}>Coba lagi</button>
     </div>
   {/if}
 
   {#if hasOlder}
-    <button type="button" class="btn-retry" disabled={isFetching} onclick={() => fetchMessages(true)}>Muat pesan sebelumnya</button>
+    <button type="button" class="btn btn-secondary btn-load-older" disabled={isFetching} onclick={() => fetchMessages(true)}>
+      Muat pesan sebelumnya
+    </button>
   {/if}
 
-  <!-- Messages Flow -->
+  <!-- Messages List: No separate scrollbar, flows naturally with main scroll -->
   <div class="messages-list">
     {#if messages.length === 0}
-      <div class="empty-conversation">
-        <p>Belum ada pesan dalam tiket ini. Mulai percakapan untuk berdiskusi dengan tim penanganan.</p>
-      </div>
+      <p class="empty-chat-text">Belum ada pesan dalam tiket ini. Mulai percakapan untuk berdiskusi dengan tim penanganan.</p>
     {:else}
       {#each messages as msg}
-        <div class="message-bubble" class:my-message={String(msg.senderId) === String(currentUser.id)}>
-          <div class="message-meta">
+        <div class="message-item" class:my-message={String(msg.senderId) === String(currentUser.id)}>
+          <div class="message-meta-row">
             <span class="sender-name">
               <strong>{msg.senderUsername}</strong>
-              <span class="role-tag role-{msg.senderRole.toLowerCase().replace(' ', '-')}">{msg.senderRole}</span>
+              <span class="badge-role badge-neutral">{msg.senderRole}</span>
             </span>
-            <span class="message-time">{new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span class="message-time tabular-nums">
+              {new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+            </span>
           </div>
-          <div class="message-body">
-            {msg.messageText}
-          </div>
+          {#if msg.messageText}
+            <div class="message-text">
+              {msg.messageText}
+            </div>
+          {/if}
 
           {#if msg.attachments && msg.attachments.length > 0}
-            <Attachments attachments={msg.attachments} />
+            <div class="message-attachments">
+              <Attachments attachments={msg.attachments} />
+            </div>
           {/if}
         </div>
       {/each}
     {/if}
   </div>
 
-  <!-- Send Form or Read-Only Notice -->
+  <!-- Chat Composer or Read-Only Notice -->
   {#if isClosed}
-    <div class="closed-notice">
+    <div class="closed-notice" role="status">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
-      <span>Tiket telah ditutup dan diarsipkan. Seluruh percakapan terkunci sebagai histori.</span>
+      <span>Tiket ditutup. Percakapan hanya dapat dibaca.</span>
     </div>
   {:else}
     {#if sendError}
@@ -192,76 +205,88 @@
       </div>
     {/if}
 
-    <form onsubmit={handleSendMessage} class="message-form">
+    <form onsubmit={handleSendMessage} class="chat-composer">
       {#if selectedFiles.length > 0}
-        <div class="chips-row">
+        <div class="chips-list">
           {#each selectedFiles as f, idx}
-            <span class="file-chip">
-              {f.name} ({(f.size / 1024).toFixed(0)} KB)
-              <button type="button" class="btn-del-chip" aria-label={`Hapus lampiran ${f.name}`} disabled={isSending || deliveryUncertain} onclick={() => removeChatFile(idx)}>&times;</button>
-            </span>
+            <div class="file-chip">
+              <span class="chip-name">{f.name} ({(f.size / 1024).toFixed(0)} KB)</span>
+              <button
+                type="button"
+                class="btn-remove-chip"
+                aria-label={`Hapus lampiran ${f.name}`}
+                disabled={isSending || deliveryUncertain}
+                onclick={() => removeChatFile(idx)}
+              >
+                &times;
+              </button>
+            </div>
           {/each}
         </div>
       {/if}
 
-      <div class="input-row">
-        <label class="btn-attach" for="chat-files">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-          </svg>
-          <span>Lampirkan berkas</span>
-          <input
-            id="chat-files"
-            type="file"
-            multiple
-            accept=".jpg,.jpeg,.png,.webp,.pdf"
-            onchange={handleChatFiles}
-            disabled={isSending || deliveryUncertain || selectedFiles.length >= 5}
-            class="sr-only"
-          />
-        </label>
-        <label class="sr-only" for="chat-message">Pesan</label>
+      <div class="composer-inputs">
+        <label class="sr-only" for="chat-message-input">Tulis pesan</label>
         <textarea
-          id="chat-message"
-          rows="2"
+          id="chat-message-input"
+          rows="3"
           bind:value={newMessage}
-          placeholder="Tulis pesan atau tanggapan kendala…"
+          placeholder="Tulis pesan untuk tim IT…"
           disabled={isSending || deliveryUncertain}
         ></textarea>
-        <button type="submit" class="btn btn-primary" disabled={isSending || (!newMessage.trim() && selectedFiles.length === 0)}>
-          {isSending ? 'Mengirim…' : 'Kirim'}
-        </button>
+
+        <div class="composer-actions">
+          <label class="btn btn-secondary btn-attach" for="chat-file-picker">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+            <span>Lampirkan Berkas</span>
+            <input
+              id="chat-file-picker"
+              type="file"
+              multiple
+              accept=".jpg,.jpeg,.png,.webp,.pdf"
+              onchange={handleChatFiles}
+              disabled={isSending || deliveryUncertain || selectedFiles.length >= 5}
+              class="sr-only"
+            />
+          </label>
+
+          <button
+            type="submit"
+            class="btn btn-primary"
+            disabled={isSending || (!newMessage.trim() && selectedFiles.length === 0)}
+          >
+            {isSending ? 'Mengirim…' : 'Kirim Pesan'}
+          </button>
+        </div>
       </div>
       <span class="field-hint">Maksimal 5 berkas per pesan (JPG, PNG, WebP, PDF hingga 10 MB).</span>
     </form>
   {/if}
-</div>
+</section>
 
 <style>
-  .btn-attach:focus-within { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-  .conversation-card {
+  .conversation-panel {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: 24px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
+    width: 100%;
   }
 
   .conversation-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     border-bottom: 1px solid var(--color-border);
     padding-bottom: 12px;
   }
 
-  .conversation-header h3 {
-    font-size: 1.05rem;
-  }
-
-  .polling-indicator {
+  .chat-status-indicator {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -269,223 +294,155 @@
     color: var(--color-text-muted);
   }
 
-  .pulse-dot {
+  .status-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background-color: var(--color-text-muted);
   }
 
-  .pulse-dot.active {
+  .status-dot.active {
     background-color: var(--color-success);
-    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+  }
+
+  .btn-load-older {
+    align-self: center;
   }
 
   .messages-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    max-height: 480px;
-    overflow-y: auto;
-    padding-right: 4px;
+    gap: 16px;
   }
 
-  .empty-conversation {
+  .empty-chat-text {
     text-align: center;
     padding: 32px 16px;
     color: var(--color-text-muted);
     font-size: 0.875rem;
   }
 
-  .message-bubble {
+  .message-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 16px;
     background-color: var(--color-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    padding: 12px 14px;
-    max-width: 80%;
-    align-self: flex-start;
   }
 
-  .message-bubble.my-message {
-    align-self: flex-end;
-    background-color: rgba(37, 99, 235, 0.08);
-    border-color: rgba(37, 99, 235, 0.2);
+  .message-item.my-message {
+    border-left: 3px solid var(--color-primary);
   }
 
-  .message-meta {
+  .message-meta-row {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 6px;
-    font-size: 0.75rem;
+    gap: 8px;
   }
 
   .sender-name {
     display: flex;
     align-items: center;
-    gap: 6px;
-  }
-
-  .role-tag {
-    font-size: 0.65rem;
-    font-weight: 600;
-    padding: 1px 4px;
-    border-radius: 3px;
-    border: 1px solid var(--color-border);
-  }
-
-  .role-it-staff, .role-super-admin {
-    background-color: var(--color-primary);
-    color: var(--color-primary-text);
-    border: none;
-  }
-
-  .role-user {
-    background-color: var(--color-surface);
-    color: var(--color-text-muted);
+    gap: 8px;
+    font-size: 0.875rem;
+    color: var(--color-text);
   }
 
   .message-time {
+    font-size: 0.75rem;
     color: var(--color-text-muted);
   }
 
-  .message-body {
-    font-size: 0.875rem;
+  .message-text {
+    font-size: 0.95rem;
     line-height: 1.5;
-    white-space: pre-wrap;
+    color: var(--color-text);
     word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .message-attachments {
+    margin-top: 4px;
   }
 
   .closed-notice {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px;
-    background-color: var(--color-bg);
+    padding: 14px 16px;
+    background-color: var(--color-neutral-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    color: var(--color-text-muted);
-    font-size: 0.85rem;
+    color: var(--color-neutral);
+    font-size: 0.875rem;
+    font-weight: 500;
   }
 
-  .message-form {
+  .chat-composer {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     border-top: 1px solid var(--color-border);
-    padding-top: 14px;
+    padding-top: 16px;
   }
 
-  .chips-row {
+  .chips-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
   }
 
   .file-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
+    gap: 8px;
+    padding: 4px 10px;
     background-color: var(--color-bg);
     border: 1px solid var(--color-border);
-    border-radius: 4px;
-    font-size: 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
   }
 
-  .btn-del-chip {
+  .chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+  }
+
+  .btn-remove-chip {
     background: none;
     border: none;
+    font-size: 1.1rem;
+    line-height: 1;
     color: var(--color-danger);
-    font-size: 0.9rem;
     cursor: pointer;
     padding: 0 2px;
   }
 
-  .input-row {
+  .composer-inputs {
     display: flex;
-    gap: 8px;
-    align-items: flex-end;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .composer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
   }
 
   .btn-attach {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 42px;
-    height: 42px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background-color: var(--color-bg);
-    color: var(--color-text-muted);
     cursor: pointer;
-    flex-shrink: 0;
   }
 
-  .btn-attach:hover {
-    color: var(--color-primary);
-    background-color: var(--color-surface);
-  }
-
-  textarea {
-    flex: 1;
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    font-size: 0.875rem;
-    resize: vertical;
-  }
-
-  textarea:focus {
-    border-color: var(--color-primary);
-    outline: none;
-  }
-
-  .btn {
-    padding: 10px 16px;
-    border-radius: var(--radius-sm);
-    font-size: 0.875rem;
-    font-weight: 600;
-    cursor: pointer;
-    border: none;
-    height: 42px;
-  }
-
-  .btn-primary {
-    background-color: var(--color-primary);
-    color: var(--color-primary-text);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .field-hint {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-  }
-
-  .alert {
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    font-size: 0.85rem;
-  }
-
-  .alert-error {
-    background-color: rgba(220, 38, 38, 0.1);
-    color: var(--color-danger);
-    border: 1px solid rgba(220, 38, 38, 0.2);
-  }
-
-  .btn-retry {
-    background: none;
-    border: none;
-    color: var(--color-primary);
-    font-weight: 600;
-    margin-left: 8px;
-    cursor: pointer;
+  .btn-attach:focus-within {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
   }
 </style>
