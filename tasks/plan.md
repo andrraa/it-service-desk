@@ -5,10 +5,10 @@ Landasan: `../PRD.md`, termasuk NIK karyawan serta Light Mode dan Dark Mode.
 
 ## Kondisi awal
 
-- Proyek baru; hanya PRD, belum ada kode atau repository Git.
+- Proyek baru; Git sudah diinisialisasi dengan commit baseline PRD dan rencana. Belum ada kode aplikasi.
 - Bun 1.4.2 telah diinstal global pada host melalui `npm install --global bun`; revision `1.4.2+744846f84` terverifikasi.
 - Docker CLI dan daemon tersedia (server 29.8.0). PostgreSQL 16 sudah berjalan di container `postgres`, host port 5432, dan `pg_isready` berhasil. Gunakan instance ini tanpa mengganti container atau mengubah data aplikasi lain.
-- Belum ada dependency terpasang, database proyek, atau pengujian aplikasi.
+- Database dan role `it_service_desk` sudah dibuat pada container existing. Koneksi nyata dari Bun berhasil; kredensial berada di `.env` (0600, diabaikan Git). Belum ada schema aplikasi, dependency proyek, atau pengujian fitur.
 
 ## Arsitektur yang diusulkan
 
@@ -29,7 +29,7 @@ API Bun/Svelte yang digunakan dan versi dependency perlu diverifikasi terhadap d
 1. NIK wajib saat registrasi/pembuatan akun IT, unik per karyawan, disimpan sebagai string. NIK bukan bukti identitas untuk reset password dan bukan pengganti username login.
 2. Prioritas manual untuk MVP; urgensi dahulu, FIFO dalam prioritas yang sama.
 3. Usulan PRD dipakai sebagai default: reset oleh Super Admin, password sementara berlaku 24 jam, minimum password 12 karakter, Closed read-only, lampiran JPG/PNG/WebP/PDF maksimal 10 MB/file dan lima file/pengiriman.
-4. Disetujui pengguna: Bun global pada host dan PostgreSQL pada container existing. Database serta role khusus proyek perlu dipastikan sebelum migration; tidak menggunakan database aplikasi lain atau menjalankan container DB baru.
+4. Disetujui pengguna: Bun global pada host dan PostgreSQL pada container existing. Database serta role khusus `it_service_desk` telah dibuat dan koneksinya diverifikasi. Tidak menggunakan database aplikasi lain atau menjalankan container DB baru.
 5. Baseline akses produksi adalah jaringan internal/VPN. Deployment publik, retensi data, volume beban, serta kanal verifikasi identitas perlu keputusan terpisah sebelum go-live.
 
 Setelah disetujui, sinkronkan aturan NIK dan keputusan default ke PRD sebelum membuat schema terkait.
@@ -119,4 +119,4 @@ Permintaan pengguna: setiap increment pekerjaan yang telah lolos verifikasi haru
 
 ## Gate implementasi
 
-Setup host dan baseline Git diizinkan pengguna. Bun sudah terinstal; belum ada kode aplikasi atau perubahan database. Keputusan produk yang belum disepakati tetap ditandai sebagai usulan.
+Setup host, baseline Git, serta database/role khusus proyek telah diizinkan pengguna dan selesai. Belum ada kode aplikasi atau schema aplikasi. Keputusan produk yang belum disepakati tetap ditandai sebagai usulan.

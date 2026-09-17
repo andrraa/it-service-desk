@@ -1,14 +1,15 @@
 # Checklist Development — IT Service Desk
 
-Status: rencana; belum ada implementasi. Referensi: `plan.md` dan `../PRD.md`.
+Status: setup Bun, Git, dan database selesai; fitur aplikasi belum diimplementasikan. Referensi: `plan.md` dan `../PRD.md`.
 Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file adalah perkiraan, bukan scaffolding wajib.
 
 ## 1. Toolchain dan database lokal
 - [x] Install Bun global pada host (1.4.2); verifikasi PostgreSQL existing menerima koneksi.
-- [ ] Siapkan package scripts, TypeScript strict, dan koneksi database khusus proyek pada container existing.
+- [x] Buat database/role khusus `it_service_desk`, simpan secret lokal privat, dan verifikasi koneksi nyata dari Bun.
+- [ ] Siapkan package scripts, TypeScript strict, dan API health.
 - Acceptance: API health memeriksa DB; konfigurasi env tervalidasi; credentials tidak ditanam di kode.
 - Verifikasi: koneksi DB nyata, health sukses/gagal, `bun run check`.
-- Dependensi: konfirmasi database/role khusus proyek; instalasi Bun sudah selesai.
+- Dependensi: instalasi Bun dan database/role khusus proyek sudah selesai serta terverifikasi.
 - File: `package.json`, `tsconfig.json`, `.env.example`, `src/server/index.ts` (lockfile dihasilkan tooling).
 
 ## 2. Shell Svelte dan tema
