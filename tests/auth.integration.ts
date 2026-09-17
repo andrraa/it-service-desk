@@ -1,20 +1,20 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from '../src/server/app';
+import { handleRequest } from '../src/server/app';
+import { openTestDatabase, closeTestDatabase } from './database';
 
 describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
     // Clean up test users
     await sql`DELETE FROM users WHERE username LIKE 'test_user_%' OR nik LIKE 'TEST_%'`;
   });
 
   afterAll(async () => {
     await sql`DELETE FROM users WHERE username LIKE 'test_user_%' OR nik LIKE 'TEST_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: preserves leading zero in NIK string', async () => {

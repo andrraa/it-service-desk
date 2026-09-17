@@ -14,7 +14,6 @@
 
   let messages = $state<TicketMessage[]>([]);
   let newMessage = $state('');
-  let draftBackup = $state('');
   let selectedFiles = $state<File[]>([]);
   let isSending = $state(false);
   let errorMessage = $state('');
@@ -70,7 +69,6 @@
 
     isSending = true;
     sendError = '';
-    draftBackup = newMessage;
 
     try {
       // 1. Post text message (or placeholder if only attachments)
@@ -114,7 +112,6 @@
 
       // Reset
       newMessage = '';
-      draftBackup = '';
       selectedFiles = [];
       await fetchMessages(true);
     } catch {

@@ -1,11 +1,11 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from '../src/server/app';
+import { handleRequest } from '../src/server/app';
+import { openTestDatabase, closeTestDatabase } from './database';
 import { hashPassword } from '../src/server/auth';
 
 describe('Dashboard & Claim Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
   const authHeaders = {
     'Content-Type': 'application/json',
     'X-Requested-With': 'fetch',
@@ -16,12 +16,8 @@ describe('Dashboard & Claim Integration Tests (Live PostgreSQL)', () => {
   let it2Session: string;
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
 
-    // Clean previous test data
-    await sql`DELETE FROM audit_logs WHERE reason LIKE 'TEST_AUDIT_%' OR reason LIKE 'Tiket diambil oleh%'`;
-    await sql`DELETE FROM tickets WHERE title LIKE 'DASH_%'`;
-    await sql`DELETE FROM users WHERE username LIKE 'dash_test_%'`;
 
     const passHash = await hashPassword('password_aman_dash_123');
 
@@ -54,10 +50,7 @@ describe('Dashboard & Claim Integration Tests (Live PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    await sql`DELETE FROM audit_logs WHERE reason LIKE 'TEST_AUDIT_%' OR reason LIKE 'Tiket diambil oleh%'`;
-    await sql`DELETE FROM tickets WHERE title LIKE 'DASH_%'`;
-    await sql`DELETE FROM users WHERE username LIKE 'dash_test_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: regular User is forbidden from accessing dashboard summary or queue', async () => {

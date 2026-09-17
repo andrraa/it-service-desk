@@ -273,7 +273,7 @@
           {currentUser}
           onBack={() => {
             selectedTicket = null;
-            currentView = currentUser.role === 'User' ? 'tickets' : 'dashboard';
+            currentView = currentUser?.role === 'User' ? 'tickets' : 'dashboard';
           }}
         />
       {/if}

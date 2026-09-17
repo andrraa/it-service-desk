@@ -1,20 +1,20 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
 import { bootstrapAdmin } from '../scripts/bootstrap-admin';
-import { readConfig, handleRequest } from '../src/server/app';
+import { handleRequest } from '../src/server/app';
+import { openTestDatabase, closeTestDatabase } from './database';
 
 describe('Super Admin Bootstrap Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
     await sql`DELETE FROM users WHERE username LIKE 'test_admin_%' OR nik LIKE 'ADM_%'`;
   });
 
   afterAll(async () => {
     await sql`DELETE FROM users WHERE username LIKE 'test_admin_%' OR nik LIKE 'ADM_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: bootstraps explicit admin without logging secrets, idempotent on repetition', async () => {

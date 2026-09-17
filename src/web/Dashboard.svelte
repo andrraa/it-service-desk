@@ -8,7 +8,7 @@
     onSelectTicket?: (ticket: Ticket) => void;
   }
 
-  let { currentUser, onSelectTicket }: Props = $props();
+  let { onSelectTicket }: Props = $props();
 
   interface Summary {
     openCount: number;
