@@ -1,6 +1,7 @@
 # IT Service Desk
 
-Aplikasi masih dalam tahap setup, belum ada fitur aplikasi yang diimplementasikan.
+Fondasi API Bun dengan pemeriksaan koneksi PostgreSQL tersedia.
+Autentikasi, tiket, chat, lampiran, dan administrasi belum diimplementasikan.
 Kebutuhan produk: [PRD.md](PRD.md). Rencana: [tasks/plan.md](tasks/plan.md).
 
 ## Environment development
@@ -28,6 +29,32 @@ bun -e 'import { SQL } from "bun"; const db = new SQL(process.env.DATABASE_URL!)
 Bun otomatis membaca `.env`. Perintah di atas menguji koneksi nyata tanpa menampilkan
 password. Belum ada migration atau schema aplikasi. Jangan arahkan migration ke database
 aplikasi lain. Database integration test terpisah belum disiapkan.
+
+## Menjalankan API
+
+```sh
+bun install --frozen-lockfile
+bun run dev:api
+# API: http://127.0.0.1:3000/api/health
+```
+
+API bind ke loopback (`127.0.0.1`), dengan port opsional melalui `PORT`.
+`DATABASE_URL` wajib berupa URL PostgreSQL lengkap; konfigurasi invalid menolak startup.
+
+- `GET /api/health`: HTTP 200 `{ "status": "ok", "database": "connected" }` jika query database berhasil.
+- Database tidak tersedia: HTTP 503 `{ "error": { "code": "SERVICE_UNAVAILABLE", "message": "Layanan sementara tidak tersedia." } }`.
+- Metode selain GET: 405; endpoint tidak dikenal: 404. Respons JSON tidak di-cache dan tidak mengungkap kredensial/stack trace.
+
+```sh
+bun test          # Unit tests; tidak membutuhkan database
+bun run check     # TypeScript strict
+bun run build     # Build backend ke dist/server
+bun run start     # Jalankan hasil build
+bun audit
+```
+
+Sumber API runtime: [Bun HTTP](https://bun.com/docs/runtime/http/server),
+[Bun SQL](https://bun.com/docs/runtime/sql#connection-pooling).
 
 ## Workflow
 

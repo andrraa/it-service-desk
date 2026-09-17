@@ -1,14 +1,14 @@
 # Rencana Implementasi — IT Service Desk
 
-Status: menunggu review sebelum coding.
+Status: implementasi bertahap dimulai sesuai instruksi pengguna; checkpoint fondasi sedang dikerjakan.
 Landasan: `../PRD.md`, termasuk NIK karyawan serta Light Mode dan Dark Mode.
 
 ## Kondisi awal
 
-- Proyek baru; Git sudah diinisialisasi dengan commit baseline PRD dan rencana. Belum ada kode aplikasi.
+- Git memiliki baseline PRD, setup, dan database. API Bun dengan health check PostgreSQL kini diimplementasikan; fitur bisnis menyusul.
 - Bun 1.4.2 telah diinstal global pada host melalui `npm install --global bun`; revision `1.4.2+744846f84` terverifikasi.
 - Docker CLI dan daemon tersedia (server 29.8.0). PostgreSQL 16 sudah berjalan di container `postgres`, host port 5432, dan `pg_isready` berhasil. Gunakan instance ini tanpa mengganti container atau mengubah data aplikasi lain.
-- Database dan role `it_service_desk` sudah dibuat pada container existing. Koneksi nyata dari Bun berhasil; kredensial berada di `.env` (0600, diabaikan Git). Belum ada schema aplikasi, dependency proyek, atau pengujian fitur.
+- Database dan role `it_service_desk` sudah dibuat pada container existing. Koneksi nyata dari Bun berhasil; kredensial berada di `.env` (0600, diabaikan Git). Belum ada schema bisnis. Toolchain TypeScript dan unit test API sudah tersedia.
 
 ## Arsitektur yang diusulkan
 
@@ -22,7 +22,7 @@ Landasan: `../PRD.md`, termasuk NIK karyawan serta Light Mode dan Dark Mode.
 - Modul dipisahkan per fitur, tanpa generic repository/factory atau microservices.
 - Deployment awal satu instance aplikasi dan PostgreSQL. HTTPS wajib saat produksi; port database tidak diekspos publik.
 
-API Bun/Svelte yang digunakan dan versi dependency perlu diverifikasi terhadap dokumentasi resmi sebelum implementasi; versi final dikunci pada lockfile.
+API Bun diverifikasi terhadap dokumentasi HTTP/SQL resmi. TypeScript 6.0.3 dan @types/bun 1.4.2 dikunci pada bun.lock; TypeScript 6 dipilih sesuai peer dependency svelte-check.
 
 ## Keputusan yang memerlukan persetujuan
 
@@ -119,4 +119,4 @@ Permintaan pengguna: setiap increment pekerjaan yang telah lolos verifikasi haru
 
 ## Gate implementasi
 
-Setup host, baseline Git, serta database/role khusus proyek telah diizinkan pengguna dan selesai. Belum ada kode aplikasi atau schema aplikasi. Keputusan produk yang belum disepakati tetap ditandai sebagai usulan.
+Pengguna menginstruksikan melanjutkan development. Setup dan fondasi API selesai; implementasi shell Svelte berikutnya. Keputusan produk yang belum disepakati tetap ditandai sebagai usulan dan tidak menghalangi fondasi.
