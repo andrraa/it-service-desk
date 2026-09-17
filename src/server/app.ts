@@ -15,6 +15,7 @@ import {
 import {
   validateCreateTicketInput,
   validateUpdatePriorityInput,
+  validateCloseTicketInput,
   formatTicketNumber,
   type Ticket,
 } from './tickets';
@@ -529,6 +530,105 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
   }
 
+  // Close Ticket with Solution: POST /api/tickets/:id/close
+  const closeMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/close$/);
+  if (closeMatch) {
+    const ticketId = closeMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (request.method !== 'POST') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+    }
+
+    const validation = validateCloseTicketInput(body);
+    if (!validation.valid) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: 'Data penutupan tiket tidak valid.', details: validation.errors } }, 422);
+    }
+
+    const { solution } = validation.data;
+
+    try {
+      const ticketRows = await ctx.sql`
+        SELECT id, creator_id AS "creatorId", assignee_id AS "assigneeId", status
+        FROM tickets
+        WHERE id = ${ticketId} OR ticket_number = ${ticketId}
+        LIMIT 1
+      `;
+      if (ticketRows.length === 0) {
+        return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
+      }
+
+      const t = ticketRows[0] as { id: number | string; creatorId: number | string; assigneeId: number | string | null; status: string };
+
+      if (t.status === 'Closed') {
+        return json({ error: { code: 'CONFLICT', message: 'Tiket sudah ditutup sebelumnya.' } }, 409);
+      }
+
+      // Acceptance: hanya pemilik penanganan (assignee) atau admin yang dapat menutup tiket
+      const isAssignee = t.assigneeId && String(t.assigneeId) === String(user.id);
+      const isAdmin = user.role === 'Super Admin';
+
+      if (!isAssignee && !isAdmin) {
+        return json({ error: { code: 'FORBIDDEN', message: 'Hanya penanggung jawab tiket atau Super Admin yang dapat menutup tiket ini.' } }, 403);
+      }
+
+      // Atomic transaction: update ticket to Closed + insert resolution + insert audit log
+      const closeResult = await ctx.sql.begin(async (tx) => {
+        const updatedTickets = await tx`
+          UPDATE tickets
+          SET status = 'Closed', updated_at = NOW()
+          WHERE id = ${t.id} AND status != 'Closed'
+          RETURNING id, ticket_number AS "ticketNumber", creator_id AS "creatorId", assignee_id AS "assigneeId", title, description, priority, status, created_at AS "createdAt", updated_at AS "updatedAt"
+        `;
+
+        if (updatedTickets.length === 0) {
+          throw new Error('ALREADY_CLOSED');
+        }
+
+        const resRows = await tx`
+          INSERT INTO resolutions (ticket_id, resolver_id, solution)
+          VALUES (${t.id}, ${user.id}, ${solution})
+          RETURNING id, solution, closed_at AS "closedAt"
+        `;
+
+        await tx`
+          INSERT INTO audit_logs (ticket_id, actor_id, action, old_value, new_value, reason)
+          VALUES (
+            ${t.id},
+            ${user.id},
+            'CLOSE_TICKET',
+            ${{ status: t.status }},
+            ${{ status: 'Closed' }},
+            ${solution}
+          )
+        `;
+
+        return { ticket: updatedTickets[0], resolution: resRows[0] };
+      });
+
+      return json({
+        message: 'Tiket berhasil diselesaikan dan ditutup.',
+        ticket: closeResult.ticket,
+        resolution: closeResult.resolution,
+      });
+    } catch (err: any) {
+      if (err?.message === 'ALREADY_CLOSED') {
+        return json({ error: { code: 'CONFLICT', message: 'Tiket sudah ditutup oleh proses lain.' } }, 409);
+      }
+      console.error('Close ticket error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat menutup tiket.' } }, 500);
+    }
+  }
+
   // Conversation Routes: /api/tickets/:id/messages
   const messagesMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/messages$/);
   if (messagesMatch) {
@@ -757,12 +857,10 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
       const att = rows[0] as { id: number | string; originalName: string; storagePath: string; mimeType: string; creatorId: number | string };
 
-      // Access control: User can only download their own ticket attachments. IT Staff / Super Admin can download all.
       if (user.role === 'User' && String(att.creatorId) !== String(user.id)) {
         return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke berkas ini.' } }, 403);
       }
 
-      // Path traversal prevention: enforce storage path basename only
       const safeBasename = att.storagePath.replace(/^.*[\\\/]/, '');
       const filePath = join(getUploadsDir(), safeBasename);
 
@@ -1057,10 +1155,19 @@ export async function handleRequest(request: Request, ctx: AppContext) {
           t.priority, 
           t.status, 
           t.created_at AS "createdAt", 
-          t.updated_at AS "updatedAt"
+          t.updated_at AS "updatedAt",
+          CASE WHEN r.id IS NOT NULL THEN
+            JSON_BUILD_OBJECT(
+              'solution', r.solution,
+              'resolverUsername', ru.username,
+              'closedAt', r.closed_at
+            )
+          ELSE NULL END AS resolution
         FROM tickets t
         JOIN users u ON t.creator_id = u.id
         LEFT JOIN users a ON t.assignee_id = a.id
+        LEFT JOIN resolutions r ON r.ticket_id = t.id
+        LEFT JOIN users ru ON r.resolver_id = ru.id
         WHERE t.id = ${ticketIdOrNumber} OR t.ticket_number = ${ticketIdOrNumber}
         LIMIT 1
       `;

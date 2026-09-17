@@ -18,6 +18,12 @@
   let isLoading = $state(true);
   let errorMessage = $state('');
 
+  // Close modal
+  let showCloseModal = $state(false);
+  let solutionText = $state('');
+  let closeError = $state('');
+  let isClosing = $state(false);
+
   async function fetchTicketDetail() {
     isLoading = true;
     errorMessage = '';
@@ -38,13 +44,46 @@
 
       if (resAtt.ok) {
         const dataAtt: any = await resAtt.json();
-        // Filter only initial ticket attachments (message_id is null)
         ticketAttachments = (dataAtt.attachments || []).filter((a: any) => !a.messageId);
       }
     } catch (err: any) {
       errorMessage = err.message || 'Terjadi kesalahan sistem.';
     } finally {
       isLoading = false;
+    }
+  }
+
+  async function handleCloseTicket() {
+    if (!solutionText.trim() || solutionText.trim().length < 10) {
+      closeError = 'Solusi wajib diisi minimal 10 karakter agar penanganan terdokumentasi dengan baik.';
+      return;
+    }
+
+    isClosing = true;
+    closeError = '';
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}/close`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'fetch',
+        },
+        body: JSON.stringify({ solution: solutionText.trim() }),
+      });
+
+      const data: any = await res.json();
+      if (!res.ok) {
+        closeError = data.error?.message || 'Gagal menutup tiket.';
+        return;
+      }
+
+      showCloseModal = false;
+      solutionText = '';
+      await fetchTicketDetail();
+    } catch {
+      closeError = 'Terjadi kesalahan jaringan saat menghubungi server.';
+    } finally {
+      isClosing = false;
     }
   }
 
@@ -61,6 +100,15 @@
       </svg>
       Kembali ke Daftar
     </button>
+
+    {#if ticket && ticket.status !== 'Closed' && (String(ticket.assigneeId) === String(currentUser.id) || currentUser.role === 'Super Admin')}
+      <button type="button" class="btn btn-close-action" onclick={() => (showCloseModal = true)}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+        Selesaikan & Tutup Tiket
+      </button>
+    {/if}
   </div>
 
   {#if errorMessage}
@@ -105,6 +153,24 @@
       </div>
     </div>
 
+    <!-- Closed Resolution Banner (Histori Resmi) -->
+    {#if ticket.status === 'Closed' && ticket.resolution}
+      <div class="resolution-banner">
+        <div class="resolution-header">
+          <div class="resolution-tag">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+            <strong>Solusi & Penyelesaian Masalah</strong>
+          </div>
+          <span class="resolution-meta">
+            Ditutup oleh <strong>{ticket.resolution.resolverUsername}</strong> pada {new Date(ticket.resolution.closedAt).toLocaleString('id-ID')}
+          </span>
+        </div>
+        <p class="resolution-text">{ticket.resolution.solution}</p>
+      </div>
+    {/if}
+
     <div class="ticket-content-card">
       <h3>Deskripsi Masalah</h3>
       <p class="description-text">{ticket.description}</p>
@@ -123,6 +189,50 @@
       {currentUser}
     />
   {/if}
+
+  <!-- Close Ticket Modal -->
+  {#if showCloseModal && ticket}
+    <div
+      class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-close-title"
+      tabindex="-1"
+      onkeydown={(e) => { if (e.key === 'Escape') showCloseModal = false; }}
+    >
+      <div class="modal-card">
+        <h3 id="modal-close-title">Dokumentasi Solusi & Penutupan Tiket</h3>
+        <p class="modal-sub">
+          Tiket: <strong>{ticket.ticketNumber}</strong> — {ticket.title}
+        </p>
+
+        {#if closeError}
+          <div class="alert alert-error" role="alert" style="margin-top: 10px;">{closeError}</div>
+        {/if}
+
+        <div class="form-group" style="margin-top: 14px;">
+          <label for="close-solution">Tindakan Penyelesaian / Solusi (Wajib)</label>
+          <textarea
+            id="close-solution"
+            rows="4"
+            bind:value={solutionText}
+            placeholder="Tuliskan secara jelas langkah perbaikan atau solusi yang telah dilakukan untuk menyelesaikan kendala ini…"
+            disabled={isClosing}
+          ></textarea>
+          <span class="field-hint">Solusi ini akan terkunci permanen sebagai histori pengetahuan (read-only).</span>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px;">
+          <button type="button" class="btn btn-close-confirm" disabled={isClosing} onclick={handleCloseTicket}>
+            {isClosing ? 'Memproses Penutupan…' : 'Tutup Tiket Sekarang'}
+          </button>
+          <button type="button" class="btn btn-secondary" onclick={() => (showCloseModal = false)}>
+            Batal
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -134,6 +244,8 @@
 
   .detail-top-nav {
     display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .ticket-header-card, .ticket-content-card {
@@ -199,6 +311,43 @@
     margin-bottom: 2px;
   }
 
+  .resolution-banner {
+    background-color: rgba(22, 163, 74, 0.08);
+    border: 1px solid rgba(22, 163, 74, 0.25);
+    border-left: 4px solid var(--color-success);
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+  }
+
+  .resolution-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .resolution-tag {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-success);
+    font-size: 0.95rem;
+  }
+
+  .resolution-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .resolution-text {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--color-text);
+    white-space: pre-wrap;
+  }
+
   .ticket-content-card h3 {
     font-size: 1rem;
     margin-bottom: 12px;
@@ -233,9 +382,88 @@
     background-color: var(--color-surface-hover);
   }
 
+  .btn-close-action {
+    background-color: var(--color-success);
+    color: #ffffff;
+  }
+
+  .btn-close-confirm {
+    background-color: var(--color-success);
+    color: #ffffff;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 20px;
+  }
+
+  .modal-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    max-width: 500px;
+    width: 100%;
+  }
+
+  .modal-sub {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  label {
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  textarea {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-size: 0.875rem;
+    resize: vertical;
+  }
+
+  .field-hint {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
   .loading-state {
     text-align: center;
     padding: 40px;
     color: var(--color-text-muted);
+  }
+
+  .alert {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+  }
+
+  .alert-error {
+    background-color: rgba(220, 38, 38, 0.1);
+    color: var(--color-danger);
+    border: 1px solid rgba(220, 38, 38, 0.2);
   }
 </style>

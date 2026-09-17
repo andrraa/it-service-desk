@@ -86,14 +86,14 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `src/server/tickets.ts`, `src/server/messages.ts`, `src/web/Attachments.svelte`, `src/web/Tickets.svelte`, `src/web/Conversation.svelte`.
 
 ## 10. Solusi dan histori
-- [ ] Tutup tiket dengan solusi wajib dan tampilkan histori read-only.
+- [x] Tutup tiket dengan solusi wajib dan tampilkan histori read-only.
 - Acceptance: hanya pemilik penanganan/admin dapat menutup; solusi/status atomik; seluruh mutasi tiket Closed ditolak termasuk race dengan pesan/upload.
 - Verifikasi: solusi kosong, close tanpa hak, transaksi gagal, close bersamaan dengan kiriman, browser histori.
 - Dependensi: 9b.
 - File: `migrations/007_resolution.sql`, `src/server/tickets.ts`, `src/web/TicketDetail.svelte`, `src/web/Tickets.svelte`, `tests/tickets.integration.ts`.
 
 ### Checkpoint workflow
-- [ ] User melapor → IT mengambil → berdiskusi/lampiran → solusi → Closed → histori, terbukti lintas role.
+- [x] User melapor → IT mengambil → berdiskusi/lampiran → solusi → Closed → histori, terbukti lintas role.
 
 ## 11. Administrasi IT
 - [ ] Buat/update/aktifkan/nonaktifkan IT; pindahkan assignment; tampilkan aktivitas admin.

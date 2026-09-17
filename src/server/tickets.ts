@@ -15,6 +15,11 @@ export interface Ticket {
   status: TicketStatus;
   createdAt: string;
   updatedAt: string;
+  resolution?: {
+    solution: string;
+    resolverUsername: string;
+    closedAt: string;
+  } | null;
 }
 
 export interface CreateTicketInput {
@@ -26,6 +31,10 @@ export interface CreateTicketInput {
 export interface UpdatePriorityInput {
   priority: TicketPriority;
   reason: string;
+}
+
+export interface CloseTicketInput {
+  solution: string;
 }
 
 export function validateCreateTicketInput(input: unknown): { valid: true; data: CreateTicketInput } | { valid: false; errors: Record<string, string> } {
@@ -95,6 +104,33 @@ export function validateUpdatePriorityInput(input: unknown): { valid: true; data
     data: {
       priority: priority as TicketPriority,
       reason: (reason as string).trim(),
+    },
+  };
+}
+
+export function validateCloseTicketInput(input: unknown): { valid: true; data: CloseTicketInput } | { valid: false; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+
+  if (typeof input !== 'object' || input === null) {
+    return { valid: false, errors: { _form: 'Payload tidak valid.' } };
+  }
+
+  const { solution } = input as Record<string, unknown>;
+
+  if (typeof solution !== 'string' || solution.trim() === '') {
+    errors.solution = 'Solusi wajib diisi sebelum menutup tiket.';
+  } else if (solution.trim().length < 10) {
+    errors.solution = 'Solusi minimal 10 karakter agar terdokumentasi dengan jelas.';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    data: {
+      solution: (solution as string).trim(),
     },
   };
 }
