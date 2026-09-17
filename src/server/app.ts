@@ -337,54 +337,149 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
     if (request.method === 'GET') {
       try {
+        const queryParam = url.searchParams.get('q')?.trim() || '';
+        const rawPage = url.searchParams.get('page') || '1';
+        const rawLimit = url.searchParams.get('limit') || '20';
+
+        const page = Math.max(1, parseInt(rawPage, 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(rawLimit, 10) || 20));
+        const offset = (page - 1) * limit;
+
+        const searchPattern = queryParam ? `%${queryParam}%` : null;
+
         let ticketsQuery;
+        let countQuery;
+
         if (user.role === 'User') {
-          ticketsQuery = await ctx.sql`
-            SELECT 
-              t.id, 
-              t.ticket_number AS "ticketNumber", 
-              t.creator_id AS "creatorId", 
-              u.username AS "creatorUsername",
-              u.nik AS "creatorNik",
-              t.assignee_id AS "assigneeId",
-              a.username AS "assigneeUsername",
-              t.title, 
-              t.description, 
-              t.priority, 
-              t.status, 
-              t.created_at AS "createdAt", 
-              t.updated_at AS "updatedAt"
-            FROM tickets t
-            JOIN users u ON t.creator_id = u.id
-            LEFT JOIN users a ON t.assignee_id = a.id
-            WHERE t.creator_id = ${user.id}
-            ORDER BY t.created_at DESC
-          `;
+          if (searchPattern) {
+            ticketsQuery = await ctx.sql`
+              SELECT 
+                t.id, 
+                t.ticket_number AS "ticketNumber", 
+                t.creator_id AS "creatorId", 
+                u.username AS "creatorUsername",
+                u.nik AS "creatorNik",
+                t.assignee_id AS "assigneeId",
+                a.username AS "assigneeUsername",
+                t.title, 
+                t.description, 
+                t.priority, 
+                t.status, 
+                t.created_at AS "createdAt", 
+                t.updated_at AS "updatedAt"
+              FROM tickets t
+              JOIN users u ON t.creator_id = u.id
+              LEFT JOIN users a ON t.assignee_id = a.id
+              WHERE t.creator_id = ${user.id}
+                AND (t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})
+              ORDER BY t.created_at DESC
+              LIMIT ${limit} OFFSET ${offset}
+            `;
+            countQuery = await ctx.sql`
+              SELECT COUNT(*)::int AS count
+              FROM tickets t
+              WHERE t.creator_id = ${user.id}
+                AND (t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})
+            `;
+          } else {
+            ticketsQuery = await ctx.sql`
+              SELECT 
+                t.id, 
+                t.ticket_number AS "ticketNumber", 
+                t.creator_id AS "creatorId", 
+                u.username AS "creatorUsername",
+                u.nik AS "creatorNik",
+                t.assignee_id AS "assigneeId",
+                a.username AS "assigneeUsername",
+                t.title, 
+                t.description, 
+                t.priority, 
+                t.status, 
+                t.created_at AS "createdAt", 
+                t.updated_at AS "updatedAt"
+              FROM tickets t
+              JOIN users u ON t.creator_id = u.id
+              LEFT JOIN users a ON t.assignee_id = a.id
+              WHERE t.creator_id = ${user.id}
+              ORDER BY t.created_at DESC
+              LIMIT ${limit} OFFSET ${offset}
+            `;
+            countQuery = await ctx.sql`
+              SELECT COUNT(*)::int AS count
+              FROM tickets t
+              WHERE t.creator_id = ${user.id}
+            `;
+          }
         } else {
           // IT Staff or Super Admin: View all tickets
-          ticketsQuery = await ctx.sql`
-            SELECT 
-              t.id, 
-              t.ticket_number AS "ticketNumber", 
-              t.creator_id AS "creatorId", 
-              u.username AS "creatorUsername",
-              u.nik AS "creatorNik",
-              t.assignee_id AS "assigneeId",
-              a.username AS "assigneeUsername",
-              t.title, 
-              t.description, 
-              t.priority, 
-              t.status, 
-              t.created_at AS "createdAt", 
-              t.updated_at AS "updatedAt"
-            FROM tickets t
-            JOIN users u ON t.creator_id = u.id
-            LEFT JOIN users a ON t.assignee_id = a.id
-            ORDER BY t.created_at DESC
-          `;
+          if (searchPattern) {
+            ticketsQuery = await ctx.sql`
+              SELECT 
+                t.id, 
+                t.ticket_number AS "ticketNumber", 
+                t.creator_id AS "creatorId", 
+                u.username AS "creatorUsername",
+                u.nik AS "creatorNik",
+                t.assignee_id AS "assigneeId",
+                a.username AS "assigneeUsername",
+                t.title, 
+                t.description, 
+                t.priority, 
+                t.status, 
+                t.created_at AS "createdAt", 
+                t.updated_at AS "updatedAt"
+              FROM tickets t
+              JOIN users u ON t.creator_id = u.id
+              LEFT JOIN users a ON t.assignee_id = a.id
+              WHERE (t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})
+              ORDER BY t.created_at DESC
+              LIMIT ${limit} OFFSET ${offset}
+            `;
+            countQuery = await ctx.sql`
+              SELECT COUNT(*)::int AS count
+              FROM tickets t
+              WHERE (t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})
+            `;
+          } else {
+            ticketsQuery = await ctx.sql`
+              SELECT 
+                t.id, 
+                t.ticket_number AS "ticketNumber", 
+                t.creator_id AS "creatorId", 
+                u.username AS "creatorUsername",
+                u.nik AS "creatorNik",
+                t.assignee_id AS "assigneeId",
+                a.username AS "assigneeUsername",
+                t.title, 
+                t.description, 
+                t.priority, 
+                t.status, 
+                t.created_at AS "createdAt", 
+                t.updated_at AS "updatedAt"
+              FROM tickets t
+              JOIN users u ON t.creator_id = u.id
+              LEFT JOIN users a ON t.assignee_id = a.id
+              ORDER BY t.created_at DESC
+              LIMIT ${limit} OFFSET ${offset}
+            `;
+            countQuery = await ctx.sql`
+              SELECT COUNT(*)::int AS count
+              FROM tickets t
+            `;
+          }
         }
 
-        return json({ tickets: ticketsQuery });
+        const total = (countQuery[0] as { count: number }).count;
+
+        return json({
+          tickets: ticketsQuery,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        });
       } catch (err) {
         console.error('List tickets error:', err);
         return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengambil daftar tiket.' } }, 500);

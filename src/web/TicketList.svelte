@@ -10,22 +10,50 @@
   let { onSelectTicket, onCreateNewTicket }: Props = $props();
 
   let tickets = $state<Ticket[]>([]);
+  let searchQuery = $state('');
+  let page = $state(1);
+  let totalPages = $state(1);
+  let totalTickets = $state(0);
   let isLoading = $state(true);
   let errorMessage = $state('');
 
-  async function fetchTickets() {
+  async function fetchTickets(targetPage = page, query = searchQuery) {
     isLoading = true;
     errorMessage = '';
     try {
-      const res = await fetch('/api/tickets');
+      const url = new URL('/api/tickets', window.location.origin);
+      url.searchParams.set('page', String(targetPage));
+      url.searchParams.set('limit', '10');
+      if (query.trim()) {
+        url.searchParams.set('q', query.trim());
+      }
+
+      const res = await fetch(url.toString());
       if (!res.ok) throw new Error('Gagal mengambil daftar tiket.');
       const data: any = await res.json();
       tickets = data.tickets || [];
+      if (data.pagination) {
+        page = data.pagination.page;
+        totalPages = data.pagination.totalPages;
+        totalTickets = data.pagination.total;
+      }
     } catch {
       errorMessage = 'Tidak dapat memuat tiket. Periksa koneksi ke server.';
     } finally {
       isLoading = false;
     }
+  }
+
+  function handleSearch(e: Event) {
+    e.preventDefault();
+    page = 1;
+    void fetchTickets(1, searchQuery);
+  }
+
+  function handlePageChange(newPage: number) {
+    if (newPage < 1 || newPage > totalPages) return;
+    page = newPage;
+    void fetchTickets(newPage, searchQuery);
   }
 
   onMount(() => {
@@ -38,6 +66,7 @@
     <div>
       <p class="eyebrow">DAFTAR KENDALA</p>
       <h2>Tiket Saya</h2>
+      <p class="section-desc">Pantau progres laporan tiket kendala yang telah Anda buat.</p>
     </div>
     <button type="button" class="btn btn-primary" onclick={onCreateNewTicket}>
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -47,10 +76,29 @@
     </button>
   </div>
 
+  <form onsubmit={handleSearch} class="search-bar-form">
+    <div class="search-input-wrap">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="search"
+        bind:value={searchQuery}
+        placeholder="Cari nomor tiket, judul, atau deskripsi…"
+      />
+    </div>
+    <button type="submit" class="btn btn-secondary">Cari</button>
+    {#if searchQuery}
+      <button type="button" class="btn btn-secondary" onclick={() => { searchQuery = ''; void fetchTickets(1, ''); }}>
+        Reset
+      </button>
+    {/if}
+  </form>
+
   {#if errorMessage}
     <div class="alert alert-error" role="alert">
       <span>{errorMessage}</span>
-      <button type="button" class="btn-retry" onclick={fetchTickets}>Coba lagi</button>
+      <button type="button" class="btn-retry" onclick={() => fetchTickets()}>Coba lagi</button>
     </div>
   {/if}
 
@@ -64,10 +112,12 @@
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
       </svg>
       <h3>Belum Ada Tiket</h3>
-      <p>Anda belum membuat tiket kendala. Tekan tombol di bawah untuk melaporkan masalah ke tim IT.</p>
-      <button type="button" class="btn btn-primary" onclick={onCreateNewTicket} style="margin-top: 12px;">
-        Buat Tiket Pertama
-      </button>
+      <p>{searchQuery ? 'Tidak ada tiket yang cocok dengan kata kunci pencarian.' : 'Anda belum membuat tiket kendala.'}</p>
+      {#if !searchQuery}
+        <button type="button" class="btn btn-primary" onclick={onCreateNewTicket} style="margin-top: 12px;">
+          Buat Tiket Pertama
+        </button>
+      {/if}
     </div>
   {:else}
     <div class="table-card">
@@ -111,6 +161,31 @@
           {/each}
         </tbody>
       </table>
+
+      {#if totalPages > 1}
+        <div class="pagination-footer">
+          <span>Menampilkan {tickets.length} dari total {totalTickets} tiket</span>
+          <div class="pagination-buttons">
+            <button
+              type="button"
+              class="btn-page"
+              disabled={page <= 1}
+              onclick={() => handlePageChange(page - 1)}
+            >
+              Sebelumnya
+            </button>
+            <span class="page-indicator">{page} / {totalPages}</span>
+            <button
+              type="button"
+              class="btn-page"
+              disabled={page >= totalPages}
+              onclick={() => handlePageChange(page + 1)}
+            >
+              Selanjutnya
+            </button>
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -119,13 +194,47 @@
   .tickets-container {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
   }
 
   .tickets-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
+  }
+
+  .section-desc {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  .search-bar-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .search-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0 12px;
+    flex: 1;
+    max-width: 420px;
+  }
+
+  .search-input-wrap input {
+    border: none;
+    background: transparent;
+    padding: 8px 0;
+    width: 100%;
+    color: var(--color-text);
+    font-size: 0.875rem;
+    outline: none;
   }
 
   .btn {
@@ -139,6 +248,7 @@
     cursor: pointer;
     border: none;
     transition: background-color 0.15s;
+    white-space: nowrap;
   }
 
   .btn-primary {
@@ -148,6 +258,16 @@
 
   .btn-primary:hover {
     background-color: var(--color-primary-hover);
+  }
+
+  .btn-secondary {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--color-surface-hover);
   }
 
   .table-card {
@@ -243,6 +363,37 @@
     color: var(--color-text);
     font-size: 0.8rem;
     cursor: pointer;
+  }
+
+  .pagination-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+  }
+
+  .pagination-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-page {
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+
+  .btn-page:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .empty-state, .loading-state {

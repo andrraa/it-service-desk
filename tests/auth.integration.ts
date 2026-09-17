@@ -21,7 +21,7 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
     const nikWithLeadingZero = '000847291';
     const req = new Request('http://localhost/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
         nik: nikWithLeadingZero,
         username: 'test_user_nik_zero',
@@ -44,7 +44,7 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
     // First registration: test_user_ci
     const req1 = new Request('http://localhost/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
         nik: 'TEST_CI_1',
         username: 'test_user_ci',
@@ -57,7 +57,7 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
     // Duplicate registration with different casing: TEST_USER_CI
     const req2 = new Request('http://localhost/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
         nik: 'TEST_CI_2',
         username: 'TEST_USER_CI',
@@ -74,7 +74,7 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
   test('acceptance: request cannot specify role (always default to User)', async () => {
     const req = new Request('http://localhost/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
         nik: 'TEST_ROLE_HACK',
         username: 'test_user_role_hack',
@@ -95,7 +95,7 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
   test('acceptance: password hash is never leaked in response', async () => {
     const req = new Request('http://localhost/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
         nik: 'TEST_NO_HASH_LEAK',
         username: 'test_user_no_hash',
@@ -114,7 +114,7 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
     const promises = Array.from({ length: 5 }).map((_, i) => {
       const req = new Request('http://localhost/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
         body: JSON.stringify({
           nik: `TEST_CONCURRENT_${i}`,
           username: 'test_user_concurrent',

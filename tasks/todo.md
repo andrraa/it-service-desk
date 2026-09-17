@@ -48,7 +48,7 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - [x] Registrasi → login → logout dan kontrol akses terbukti pada API dan browser; review sebelum tiket.
 
 ## 6. Tiket milik pengguna
-- [ ] Buat tiket, detail, daftar paginated, dan pencarian milik sendiri.
+- [x] Buat tiket, detail, daftar paginated, dan pencarian milik sendiri.
 - Acceptance: nomor unik otomatis dan status Open; data validasi backend; User tidak melihat tiket pihak lain.
 - Verifikasi: test creation bersamaan, validasi, search/pagination, akses silang; browser create/list/detail.
 - Dependensi: 4–5.
