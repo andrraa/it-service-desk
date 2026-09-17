@@ -124,13 +124,13 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `tests/e2e.md`, `tests/security.integration.ts`, perbaikan difokuskan maksimal lima file per iterasi.
 
 ## 13b. Kesiapan operasional
-- [ ] Dokumentasikan deployment, backup/restore DB+file, logging aman, dan recovery admin.
+- [x] Dokumentasikan deployment, backup/restore DB+file, logging aman, dan recovery admin.
 - Acceptance: restore diuji di lingkungan terpisah; HTTPS/session flags production benar; target beban dan timezone dashboard disepakati sebelum benchmark.
 - Verifikasi: drill backup/restore, pemeriksaan secret/log, smoke test production build, ukur performa pada dataset yang disepakati.
 - Dependensi: 13a.
 - File: `README.md`, `docs/operations.md`, `.env.example`, `tests/release-checklist.md`.
 
 ### Checkpoint akhir
-- [ ] Seluruh acceptance criteria PRD memiliki bukti verifikasi.
-- [ ] Keputusan scope dan batas deployment disetujui.
-- [ ] Tidak ada blocker tersisa; baru kemudian nyatakan MVP siap diterima.
+- [x] Seluruh acceptance criteria PRD memiliki bukti verifikasi.
+- [x] Keputusan scope dan batas deployment disetujui.
+- [x] Tidak ada blocker tersisa; baru kemudian nyatakan MVP siap diterima.

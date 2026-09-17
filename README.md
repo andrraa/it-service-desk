@@ -1,69 +1,100 @@
-# IT Service Desk
+# IT Service Desk — Corporate Internal Workspace
 
-Fondasi API Bun dengan pemeriksaan koneksi PostgreSQL tersedia.
-Autentikasi, tiket, chat, lampiran, dan administrasi belum diimplementasikan.
-Kebutuhan produk: [PRD.md](PRD.md). Rencana: [tasks/plan.md](tasks/plan.md).
+Aplikasi internal berbasis web untuk pelaporan kendala, manajemen tiket, antrean operasional IT Staff (FIFO per urgensi prioritas), ruang percakapan & lampiran privat, serta pemulihan akses pengguna.
 
-## Environment development
+Spesifikasi Produk: [PRD.md](PRD.md)  
+Panduan Operasional & Backup: [docs/operations.md](docs/operations.md)  
+Checklist Kesiapan Rilis: [tests/release-checklist.md](tests/release-checklist.md)  
+Laporan Verifikasi E2E: [tests/e2e.md](tests/e2e.md)
 
-- Bun 1.4.2 terinstal global di host.
-- PostgreSQL 16 menggunakan container existing `postgres`, port host `5432`.
-- Database: `it_service_desk`.
-- Role login sekaligus pemilik database development: `it_service_desk`.
-- Role tidak memiliki SUPERUSER, CREATEDB, CREATEROLE, REPLICATION, atau BYPASSRLS.
-- Akses database proyek untuk `PUBLIC` telah dicabut. Database aplikasi lain tidak diubah.
+---
 
-Kredensial lokal tersimpan di `.env` dengan permission `0600` dan diabaikan Git.
-Jangan commit atau membagikan isi file tersebut. `.env.example` hanya berisi placeholder,
-bukan password yang dapat dipakai. Pada host lain, isi `.env` dengan kredensial dari
-administrator; file contoh tidak membuat database atau akun secara otomatis.
+## 1. Fitur Utama MVP
 
-Verifikasi environment:
+1. **Autentikasi & Registrasi Karyawan:**
+   - Pendaftaran menggunakan NIK (string mempertahankan leading zero) dan username case-insensitive.
+   - Sesi berbasis Cookie `HttpOnly`, `SameSite=Lax`, dan `Secure`.
+   - Proteksi CSRF & Rate Limiting pada auth.
+2. **Manajemen Tiket Milik Pengguna:**
+   - Pembuatan tiket dengan nomor urut unik otomatis (`TKT-000001`).
+   - Pencarian tiket dan pagination.
+   - Hak akses isolasi kepemilikan (User hanya dapat melihat tiket sendiri).
+3. **Dashboard Operasional IT:**
+   - Antrean FIFO per tingkat urgensi (`Critical` → `High` → `Medium` → `Low`) dengan tie-breaker ID stabil.
+   - Pengambilan tiket atomik (*race condition safe*).
+   - Penyesuaian prioritas beralasan wajib dengan audit log lengkap.
+4. **Ruang Percakapan & Lampiran Berkas Privat:**
+   - Percakapan kronologis per tiket dengan auto-polling (4 detik).
+   - Validasi berkas lampiran (JPG, PNG, WebP, PDF) dengan verifikasi magic bytes (max 10 MB).
+   - Download privat terotorisasi (pencegahan path traversal).
+5. **Penyelesaian Solusi & Histori Terkunci:**
+   - Penutupan tiket dengan solusi wajib terdokumentasi (status `Closed`).
+   - Tiket Closed terkunci read-only dari segala bentuk mutasi.
+6. **Administrasi Staf IT & Pemulihan Akun:**
+   - Pembuatan staf IT baru dengan password sementara acak 24 jam dan wajib ganti password.
+   - Pembatasan sesi (*restricted session*) di backend bagi akun yang wajib ganti password.
+   - Proteksi penonaktifan Super Admin aktif terakhir.
+7. **Antarmuka & Tema Visual:**
+   - Gaya corporate, radius 8–12 px, fokus keyboard aksesibel.
+   - Toggle Light Mode dan Dark Mode dengan penyimpanan preferensi browser.
 
-```sh
-bun --version
-docker exec postgres pg_isready
-bun -e 'import { SQL } from "bun"; const db = new SQL(process.env.DATABASE_URL!); try { console.log(await db`SELECT current_database() AS database, current_user AS role`); } finally { await db.close(); }'
+---
+
+## 2. Tech Stack
+
+- **Runtime & Backend:** Bun 1.4.2 (HTTP Server bawaan Bun + Bun SQL)
+- **Frontend:** Svelte 5 + TypeScript + Vite
+- **Database:** PostgreSQL 16
+- **Hashing:** Argon2id (bawaan `Bun.password`)
+
+---
+
+## 3. Menjalankan Aplikasi Secara Lokal
+
+### A. Persiapan Lingkungan
+Salin file konfigurasi dan isi kredensial PostgreSQL:
+```bash
+cp .env.example .env
 ```
 
-Bun otomatis membaca `.env`. Perintah di atas menguji koneksi nyata tanpa menampilkan
-password. Belum ada migration atau schema aplikasi. Jangan arahkan migration ke database
-aplikasi lain. Database integration test terpisah belum disiapkan.
+### B. Migrasi Database & Bootstrap Super Admin
+```bash
+bun run src/server/migrate.ts
 
-## Menjalankan API
+# Bootstrap Super Admin pertama (opsional)
+export ADMIN_NIK="000001"
+export ADMIN_USERNAME="superadmin"
+export ADMIN_PASSWORD="SuperPasswordAman123!"
+bun run scripts/bootstrap-admin.ts
+```
 
-```sh
-bun install --frozen-lockfile
+### C. Menjalankan Server & Frontend
+```bash
+# Terminal 1 (Backend API)
 bun run dev:api
-# API: http://127.0.0.1:3000/api/health
+
+# Terminal 2 (Frontend Vite Dev Server)
+bun run dev:web
+# Buka http://localhost:5173 di browser
 ```
 
-API bind ke loopback (`127.0.0.1`), dengan port opsional melalui `PORT`.
-`DATABASE_URL` wajib berupa URL PostgreSQL lengkap; konfigurasi invalid menolak startup.
+---
 
-- `GET /api/health`: HTTP 200 `{ "status": "ok", "database": "connected" }` jika query database berhasil.
-- Database tidak tersedia: HTTP 503 `{ "error": { "code": "SERVICE_UNAVAILABLE", "message": "Layanan sementara tidak tersedia." } }`.
-- Metode selain GET: 405; endpoint tidak dikenal: 404. Respons JSON tidak di-cache dan tidak mengungkap kredensial/stack trace.
+## 4. Pengujian & Verifikasi Kualitas
 
-```sh
-bun test          # Unit tests; tidak membutuhkan database
-bun run check     # TypeScript strict
-bun run build     # Build backend ke dist/server
-bun run start     # Jalankan hasil build
-bun audit
+```bash
+# Jalankan Typecheck TypeScript Strict
+bun run check
+
+# Jalankan Unit Tests
+bun test
+
+# Jalankan Seluruh Integration Tests (Database Nyata)
+bun test ./tests/*.integration.ts
+
+# Build Bundling Produksi
+bun run build
+
+# Menjalankan Hasil Build Produksi
+bun start
 ```
-
-Sumber API runtime: [Bun HTTP](https://bun.com/docs/runtime/http/server),
-[Bun SQL](https://bun.com/docs/runtime/sql#connection-pooling).
-
-## Workflow
-
-Setiap increment yang telah diverifikasi dibuat sebagai commit tersendiri. Secret,
-`node_modules`, dan build output tidak masuk Git. Belum ada remote/push dikonfigurasi.
-
-## Catatan produksi
-
-Konfigurasi ini untuk development, bukan hardening produksi. Port container PostgreSQL
-existing terekspos pada seluruh interface host; konfigurasi container tidak diubah karena
-dipakai bersama. Batasi akses jaringan sebelum produksi. Role runtime produksi sebaiknya
-terpisah dari pemilik schema/migration; gunakan HTTPS dan kebijakan backup yang teruji.
