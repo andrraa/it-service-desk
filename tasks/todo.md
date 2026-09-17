@@ -117,7 +117,7 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `src/web/Login.svelte`, `src/web/Password.svelte`, `src/web/Admin.svelte`, `src/web/App.svelte`, `tests/password.integration.ts`.
 
 ## 13a. Hardening dan regression
-- [ ] Audit seluruh acceptance criteria PRD dan tutup celah keamanan/UX.
+- [x] Audit seluruh acceptance criteria PRD dan tutup celah keamanan/UX.
 - Acceptance: tidak ada role/ownership bypass; DB test terpisah; responsive/keyboard/dua tema dan error states konsisten.
 - Verifikasi: `bun run check`, `bun test`, `bun run test:integration`, `bun run build`, browser end-to-end; catat hasil aktual.
 - Dependensi: 1–12.

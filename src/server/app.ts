@@ -1223,6 +1223,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
 
     try {
+      const isNumeric = /^\d+$/.test(ticketIdOrNumber);
       const rows = await ctx.sql`
         SELECT 
           t.id, 
@@ -1250,7 +1251,8 @@ export async function handleRequest(request: Request, ctx: AppContext) {
         LEFT JOIN users a ON t.assignee_id = a.id
         LEFT JOIN resolutions r ON r.ticket_id = t.id
         LEFT JOIN users ru ON r.resolver_id = ru.id
-        WHERE t.id = ${ticketIdOrNumber} OR t.ticket_number = ${ticketIdOrNumber}
+        WHERE (${isNumeric ? ctx.sql`t.id = ${Number(ticketIdOrNumber)}` : ctx.sql`FALSE`}) 
+           OR t.ticket_number = ${ticketIdOrNumber}
         LIMIT 1
       `;
 
