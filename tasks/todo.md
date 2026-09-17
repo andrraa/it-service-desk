@@ -31,24 +31,24 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `migrations/001_users.sql`, `src/server/auth.ts`, `src/web/Register.svelte`, `tests/auth.integration.ts`, `PRD.md`.
 
 ## 4. Login dan sesi
-- [x] Implementasikan login/logout, session cookie, rate limit, perlindungan CSRF, dan guard role.
+- [ ] Implementasikan login/logout, session cookie, rate limit, perlindungan CSRF, dan guard role.
 - Acceptance: sesi tersimpan aman dan memiliki expiry; nonaktif/expired ditolak; protected API tidak bergantung guard UI.
 - Verifikasi: login benar/salah, cookie flags, CSRF, logout, session expiry, rate limit, akses lintas role.
 - Dependensi: 3.
 - File: `migrations/002_sessions.sql`, `src/server/auth.ts`, `src/web/Login.svelte`, `src/web/App.svelte`, `tests/auth.integration.ts`.
 
 ## 5. Bootstrap Super Admin
-- [x] Buat jalur setup admin tanpa password default publik.
+- [ ] Buat jalur setup admin tanpa password default publik.
 - Acceptance: bootstrap eksplisit, tidak mencetak secret ke log, tidak menimpa akun existing; dokumentasikan env dan startup.
 - Verifikasi: bootstrap fresh DB, pengulangan aman, login admin.
 - Dependensi: 4.
 - File: `scripts/bootstrap-admin.ts`, `scripts/migrate.ts`, `README.md`, `.gitignore`, `tests/bootstrap.integration.ts`.
 
 ### Checkpoint akun
-- [x] Registrasi → login → logout dan kontrol akses terbukti pada API dan browser; review sebelum tiket.
+- [ ] Registrasi → login → logout dan kontrol akses terbukti pada API dan browser; review sebelum tiket.
 
 ## 6. Tiket milik pengguna
-- [x] Buat tiket, detail, daftar paginated, dan pencarian milik sendiri.
+- [ ] Buat tiket, detail, daftar paginated, dan pencarian milik sendiri.
 - Acceptance: nomor unik otomatis dan status Open; data validasi backend; User tidak melihat tiket pihak lain.
 - Verifikasi: test creation bersamaan, validasi, search/pagination, akses silang; browser create/list/detail.
 - Dependensi: 4–5.
