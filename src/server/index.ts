@@ -5,9 +5,9 @@ const config = readConfig(process.env);
 // https://bun.com/docs/runtime/sql#connection-pooling
 const db = new SQL(config.databaseUrl, { max: 5, connectionTimeout: 2, idleTimeout: 30 });
 
-// Bind locally until deployment/network policy is explicitly configured.
+// Listen on 0.0.0.0 in container or 127.0.0.1 locally
 const server = Bun.serve({
-  hostname: '127.0.0.1',
+  hostname: process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '0.0.0.0'),
   port: config.port,
   maxRequestBodySize: 64 * 1024,
   fetch: (request) => handleRequest(request, { sql: db }),

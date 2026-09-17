@@ -11,5 +11,5 @@ COPY . .
 
 EXPOSE 3000 5173
 
-# Default dev command runs both API and web with hot reload
-CMD ["bun", "run", "dev:api"]
+# Default dev command runs both API and Vite dev server
+CMD ["bun", "run", "dev:all"]

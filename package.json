@@ -8,8 +8,10 @@
     "bun": ">=1.4.2"
   },
   "scripts": {
+    "dev": "vite",
+    "dev:all": "bun run dev:api & bun run dev:web",
     "dev:api": "bun --watch src/server/index.ts",
-    "dev:web": "vite",
+    "dev:web": "vite --host",
     "check": "tsc --noEmit",
     "test": "bun test",
     "build:web": "vite build",
