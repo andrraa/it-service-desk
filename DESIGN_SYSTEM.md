@@ -130,6 +130,8 @@ Skala spacing: **4, 8, 12, 16, 24, 32, 48, 64 px**.
 - Main padding: 32 px desktop, 24 px tablet, 16 px mobile.
 - Jarak antarsection: 24–32 px; antarfield: 16 px; label ke input: 8 px.
 - Sidebar desktop: 240 px; topbar: 64 px, mobile 56 px.
+- App shell setelah login: tinggi `100dvh` dan `overflow: hidden`; sidebar serta topbar tidak ikut scroll.
+- Hanya area konten utama di bawah topbar yang memakai `overflow-y: auto` dan `overscroll-behavior: contain`.
 - Konten daftar/dashboard: maksimal 1280 px; form tiket: 720 px; autentikasi: 400 px.
 - Kontrol interaktif: tinggi minimal 44 px; icon button minimal 44 × 44 px.
 - Textarea deskripsi/solusi: tinggi awal 144 px, dapat diperbesar vertikal.
@@ -174,6 +176,16 @@ Border standar 1 px. Pakai separator antarbaris, bukan kotak pada setiap cell. S
 Sidebar hanya untuk pengguna terautentikasi. Area akun menampilkan username; role sebagai teks kecil bila relevan. NIK tidak perlu ditampilkan terus-menerus di sidebar. Menyembunyikan menu berdasarkan role tidak menggantikan otorisasi backend.
 
 ### 5.2 Anatomi halaman
+
+Struktur shell terautentikasi:
+
+```text
+App shell (100dvh, tidak scroll)
+├── Sidebar (tetap)
+└── Workspace
+    ├── Topbar (tetap)
+    └── Main content (satu-satunya area scroll)
+```
 
 1. Topbar: konteks halaman, toggle tema, akses akun.
 2. Heading: judul dan maksimal satu kalimat petunjuk bila benar-benar membantu.
@@ -274,6 +286,8 @@ Breakpoint mengikuti lebar viewport, bukan deteksi perangkat.
 | `≥ 1024 px` | Sidebar 240 px, padding 32 px, tabel antrean, detail dua kolom |
 
 - Drawer memiliki tombol buka/tutup berlabel, focus management, Escape, backdrop, scroll lock, dan mengembalikan fokus ke pemicu; gunakan pola dialog yang sama.
+- Sidebar desktop dan topbar tetap diam saat konten panjang di-scroll; jangan mengandalkan seluruh `body` sebagai scroll container.
+- Mobile header tetap di atas viewport. Saat drawer tertutup, hanya main content yang scroll; saat drawer terbuka, main content dikunci.
 - Mobile header cukup menu, judul singkat, dan tema. Sidebar **tidak boleh mengambil ruang layout saat tertutup** dan tidak boleh ditumpuk di atas konten seperti implementasi aktual.
 - Pada 320–390 px, konten utama harus terlihat pada viewport pertama tanpa harus melewati brand, seluruh menu, profil, dan tombol keluar.
 - Ringkasan dashboard: 4 kolom desktop, 2 × 2 mobile.
@@ -282,6 +296,8 @@ Breakpoint mengikuti lebar viewport, bukan deteksi perangkat.
 - Data dan callback desktop/mobile harus sama; hanya presentasinya berubah. Jangan membuat fetch dan state bisnis kedua.
 - Di tablet, gunakan list bila tabel tidak muat. Hindari scroll horizontal seluruh halaman; bukan menyembunyikan kolom penting untuk memaksakan tabel.
 - Form dan tombol dapat wrap. Keyboard virtual tidak boleh menutupi composer atau tombol submit.
+- Jangan membuat scrollbar kedua pada panel/tabel biasa. Scroll internal tambahan hanya dibolehkan untuk dialog, dropdown, atau area data yang memang dibatasi tinggi.
+- `body`, sidebar, topbar, dan main tidak boleh sama-sama menjadi scroll container; indikator scroll vertikal utama hanya berada pada main content.
 - Jangan membuat bottom navigation tambahan jika drawer sudah memenuhi kebutuhan.
 
 ## 9. State, copy, dan aksesibilitas
@@ -360,6 +376,8 @@ Urutan kerja:
 - [ ] Radius komponen hanya 0/4/8/12 px sesuai fungsi; tidak ada pill/dekorasi berlebihan.
 - [ ] Tampilan diuji pada lebar 360, 390, 768, 1024, dan 1440 px serta reflow 320 CSS px; tidak ada horizontal overflow halaman.
 - [ ] Pada mobile, konten halaman terlihat pada viewport pertama; sidebar hanya muncul setelah tombol menu diaktifkan.
+- [ ] Saat main content di-scroll pada desktop dan mobile, sidebar serta topbar tetap pada posisi semula.
+- [ ] Hanya main content memiliki scrollbar vertikal utama; tidak ada double scrollbar pada body/sidebar/panel.
 - [ ] Daftar mobile tetap menampilkan status, prioritas, penanggung jawab, serta pelapor/waktu/usia untuk antrean IT.
 - [ ] Semua role hanya melihat navigasi dan aksi yang berhak diakses; backend tetap menolak akses ilegal.
 - [ ] Loading, kosong, filter kosong, error, sukses, konflik claim, upload gagal, dan pesan gagal diuji.
