@@ -1,7 +1,16 @@
 import { expect, test } from 'bun:test';
 import { readConfig, handleRequest } from '../src/server/app';
+import type { SQL } from 'bun';
 
 const databaseUrl = 'postgresql://test:unused@127.0.0.1:5432/service_desk_test';
+
+function createMockSql(impl?: (query: string, ...args: any[]) => any): SQL {
+  const sqlMock = (async (strings: TemplateStringsArray, ...values: any[]) => {
+    if (impl) return impl(strings.join('?'), ...values);
+    return [];
+  }) as unknown as SQL;
+  return sqlMock;
+}
 
 test('configuration requires a complete PostgreSQL URL without leaking secrets', () => {
   expect(readConfig({ DATABASE_URL: databaseUrl })).toEqual({ databaseUrl, port: 3000 });
@@ -20,7 +29,8 @@ test('configuration rejects invalid ports rather than silently choosing another'
 });
 
 test('health checks the database and returns a non-cacheable JSON response', async () => {
-  const response = await handleRequest(new Request('http://localhost/api/health'), async () => 1);
+  const mockSql = createMockSql(async () => [1]);
+  const response = await handleRequest(new Request('http://localhost/api/health'), { sql: mockSql });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ status: 'ok', database: 'connected' });
   expect(response.headers.get('Cache-Control')).toBe('no-store');
@@ -29,9 +39,10 @@ test('health checks the database and returns a non-cacheable JSON response', asy
 });
 
 test('database failure returns 503 without exposing credentials or error internals', async () => {
-  const response = await handleRequest(new Request('http://localhost/api/health'), async () => {
+  const mockSql = createMockSql(async () => {
     throw new Error('postgresql://private:secret@internal/database');
   });
+  const response = await handleRequest(new Request('http://localhost/api/health'), { sql: mockSql });
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({
     error: { code: 'SERVICE_UNAVAILABLE', message: 'Layanan sementara tidak tersedia.' },
@@ -40,11 +51,11 @@ test('database failure returns 503 without exposing credentials or error interna
 
 test('unknown routes and unsupported methods do not query the database', async () => {
   let queried = false;
-  const checkDatabase = async () => { queried = true; };
-  const missing = await handleRequest(new Request('http://localhost/api/missing'), checkDatabase);
+  const mockSql = createMockSql(async () => { queried = true; return []; });
+  const missing = await handleRequest(new Request('http://localhost/api/missing'), { sql: mockSql });
   expect(missing.status).toBe(404);
   const wrongMethod = await handleRequest(
-    new Request('http://localhost/api/health', { method: 'POST' }), checkDatabase,
+    new Request('http://localhost/api/health', { method: 'POST' }), { sql: mockSql },
   );
   expect(wrongMethod.status).toBe(405);
   expect(wrongMethod.headers.get('Allow')).toBe('GET');
