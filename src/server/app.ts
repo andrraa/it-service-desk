@@ -13,6 +13,7 @@ import {
 } from './auth';
 import {
   validateCreateTicketInput,
+  validateUpdatePriorityInput,
   formatTicketNumber,
   type Ticket,
 } from './tickets';
@@ -140,7 +141,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
     }
 
-    // Rate limiting key: IP or header
     const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
     const rateCheck = rateLimiter.isAllowed(`login:${ip}`);
     if (!rateCheck.allowed) {
@@ -198,7 +198,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
         return json({ error: { code: 'UNAUTHORIZED', message: 'Username atau password salah.' } }, 401);
       }
 
-      // Successful login resets rate limit attempts
       rateLimiter.reset(`login:${ip}`);
 
       const sessionId = generateSessionId();
@@ -284,6 +283,243 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     if (!sessionId) return null;
     return await getSessionUser(ctx.sql, sessionId);
   };
+
+  // Dashboard IT Summary: GET /api/dashboard/summary
+  if (pathname === '/api/dashboard/summary') {
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'IT Staff' && user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya staf IT dan Super Admin yang dapat mengakses dashboard.' } }, 403);
+    }
+    if (request.method !== 'GET') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET' });
+    }
+
+    try {
+      const summary = await ctx.sql`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'Open')::int AS "openCount",
+          COUNT(*) FILTER (WHERE status = 'In Progress')::int AS "inProgressCount",
+          COUNT(*) FILTER (WHERE status IN ('Open', 'In Progress') AND priority = 'Critical')::int AS "criticalActiveCount",
+          COUNT(*) FILTER (WHERE status = 'Closed' AND updated_at >= CURRENT_DATE)::int AS "closedTodayCount"
+        FROM tickets
+      `;
+
+      return json({ summary: summary[0] });
+    } catch (err) {
+      console.error('Dashboard summary error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil ringkasan dashboard.' } }, 500);
+    }
+  }
+
+  // Dashboard IT Queue: GET /api/dashboard/queue (FIFO within Priority: Critical > High > Medium > Low)
+  if (pathname === '/api/dashboard/queue') {
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'IT Staff' && user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya staf IT dan Super Admin yang dapat mengakses antrean.' } }, 403);
+    }
+    if (request.method !== 'GET') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET' });
+    }
+
+    try {
+      const statusFilter = url.searchParams.get('status')?.trim(); // 'Open', 'In Progress', or empty (both active)
+      const priorityFilter = url.searchParams.get('priority')?.trim();
+      const unassignedOnly = url.searchParams.get('unassigned') === 'true';
+      const assignedToMe = url.searchParams.get('assignedToMe') === 'true';
+      const queryParam = url.searchParams.get('q')?.trim() || '';
+
+      const searchPattern = queryParam ? `%${queryParam}%` : null;
+
+      // PRD FIFO Order: Critical -> High -> Medium -> Low, then created_at ASC, then id ASC as tie-breaker
+      const rows = await ctx.sql`
+        SELECT 
+          t.id, 
+          t.ticket_number AS "ticketNumber", 
+          t.creator_id AS "creatorId", 
+          u.username AS "creatorUsername",
+          u.nik AS "creatorNik",
+          t.assignee_id AS "assigneeId",
+          a.username AS "assigneeUsername",
+          t.title, 
+          t.description, 
+          t.priority, 
+          t.status, 
+          t.created_at AS "createdAt", 
+          t.updated_at AS "updatedAt"
+        FROM tickets t
+        JOIN users u ON t.creator_id = u.id
+        LEFT JOIN users a ON t.assignee_id = a.id
+        WHERE t.status IN ('Open', 'In Progress')
+          AND (${statusFilter ? ctx.sql`t.status = ${statusFilter}` : ctx.sql`TRUE`})
+          AND (${priorityFilter ? ctx.sql`t.priority = ${priorityFilter}` : ctx.sql`TRUE`})
+          AND (${unassignedOnly ? ctx.sql`t.assignee_id IS NULL` : ctx.sql`TRUE`})
+          AND (${assignedToMe ? ctx.sql`t.assignee_id = ${user.id}` : ctx.sql`TRUE`})
+          AND (${searchPattern ? ctx.sql`(t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern})` : ctx.sql`TRUE`})
+        ORDER BY 
+          CASE t.priority 
+            WHEN 'Critical' THEN 1 
+            WHEN 'High' THEN 2 
+            WHEN 'Medium' THEN 3 
+            WHEN 'Low' THEN 4 
+            ELSE 5 
+          END ASC,
+          t.created_at ASC,
+          t.id ASC
+      `;
+
+      return json({ queue: rows });
+    } catch (err) {
+      console.error('Queue query error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil antrean tiket.' } }, 500);
+    }
+  }
+
+  // Claim Ticket: POST /api/tickets/:id/claim
+  const claimMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/claim$/);
+  if (claimMatch) {
+    const ticketId = claimMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'IT Staff' && user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya IT Staff atau Super Admin yang dapat mengambil tiket.' } }, 403);
+    }
+    if (request.method !== 'POST') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
+    }
+
+    try {
+      // Atomic claim: only succeed if ticket is Open and unassigned
+      const updated = await ctx.sql`
+        UPDATE tickets
+        SET 
+          assignee_id = ${user.id},
+          status = 'In Progress',
+          updated_at = NOW()
+        WHERE (id = ${ticketId} OR ticket_number = ${ticketId})
+          AND status = 'Open'
+          AND assignee_id IS NULL
+        RETURNING 
+          id, 
+          ticket_number AS "ticketNumber", 
+          creator_id AS "creatorId", 
+          assignee_id AS "assigneeId",
+          title, 
+          description, 
+          priority, 
+          status, 
+          created_at AS "createdAt", 
+          updated_at AS "updatedAt"
+      `;
+
+      if (updated.length === 0) {
+        return json({
+          error: {
+            code: 'CONFLICT',
+            message: 'Tiket sudah diambil oleh staf lain atau statusnya bukan Open.',
+          },
+        }, 409);
+      }
+
+      const claimedTicket = updated[0] as Ticket;
+
+      // Record in audit log
+      await ctx.sql`
+        INSERT INTO audit_logs (ticket_id, actor_id, action, old_value, new_value, reason)
+        VALUES (
+          ${claimedTicket.id},
+          ${user.id},
+          'CLAIM_TICKET',
+          ${{ status: 'Open', assigneeId: null }},
+          ${{ status: 'In Progress', assigneeId: user.id }},
+          'Tiket diambil oleh staf IT untuk penanganan.'
+        )
+      `;
+
+      return json({ message: 'Tiket berhasil diambil.', ticket: claimedTicket });
+    } catch (err) {
+      console.error('Claim ticket error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengambil tiket.' } }, 500);
+    }
+  }
+
+  // Update Ticket Priority: PATCH /api/tickets/:id/priority
+  const priorityMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/priority$/);
+  if (priorityMatch) {
+    const ticketId = priorityMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'IT Staff' && user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya staf IT dan Super Admin yang dapat mengubah prioritas tiket.' } }, 403);
+    }
+    if (request.method !== 'PATCH') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'PATCH' });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+    }
+
+    const validation = validateUpdatePriorityInput(body);
+    if (!validation.valid) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: 'Data prioritas tidak valid.', details: validation.errors } }, 422);
+    }
+
+    const { priority, reason } = validation.data;
+
+    try {
+      const currentRows = await ctx.sql`
+        SELECT id, priority, status FROM tickets WHERE id = ${ticketId} OR ticket_number = ${ticketId} LIMIT 1
+      `;
+      if (currentRows.length === 0) {
+        return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
+      }
+
+      const currentTicket = currentRows[0] as { id: number | string; priority: string; status: string };
+      if (currentTicket.status === 'Closed') {
+        return json({ error: { code: 'FORBIDDEN', message: 'Tiket yang sudah ditutup tidak dapat diubah prioritasnya.' } }, 403);
+      }
+
+      const oldPriority = currentTicket.priority;
+
+      const updated = await ctx.sql`
+        UPDATE tickets
+        SET priority = ${priority}, updated_at = NOW()
+        WHERE id = ${currentTicket.id}
+        RETURNING id, ticket_number AS "ticketNumber", creator_id AS "creatorId", assignee_id AS "assigneeId", title, description, priority, status, created_at AS "createdAt", updated_at AS "updatedAt"
+      `;
+
+      // Record audit log
+      await ctx.sql`
+        INSERT INTO audit_logs (ticket_id, actor_id, action, old_value, new_value, reason)
+        VALUES (
+          ${currentTicket.id},
+          ${user.id},
+          'CHANGE_PRIORITY',
+          ${{ priority: oldPriority }},
+          ${{ priority }},
+          ${reason}
+        )
+      `;
+
+      return json({ message: 'Prioritas tiket berhasil diperbarui.', ticket: updated[0] });
+    } catch (err) {
+      console.error('Update priority error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengubah prioritas.' } }, 500);
+    }
+  }
 
   // Ticket Routes
   if (pathname === '/api/tickets') {
@@ -411,7 +647,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
             `;
           }
         } else {
-          // IT Staff or Super Admin: View all tickets
           if (searchPattern) {
             ticketsQuery = await ctx.sql`
               SELECT 
@@ -531,7 +766,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
       const ticket = rows[0] as Ticket;
 
-      // Access control: User can only view their own tickets. IT Staff / Super Admin can view all.
       if (user.role === 'User' && String(ticket.creatorId) !== String(user.id)) {
         return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke tiket ini.' } }, 403);
       }

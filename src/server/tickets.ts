@@ -23,6 +23,11 @@ export interface CreateTicketInput {
   priority: TicketPriority;
 }
 
+export interface UpdatePriorityInput {
+  priority: TicketPriority;
+  reason: string;
+}
+
 export function validateCreateTicketInput(input: unknown): { valid: true; data: CreateTicketInput } | { valid: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
@@ -59,6 +64,37 @@ export function validateCreateTicketInput(input: unknown): { valid: true; data: 
       title: (title as string).trim(),
       description: (description as string).trim(),
       priority: priority as TicketPriority,
+    },
+  };
+}
+
+export function validateUpdatePriorityInput(input: unknown): { valid: true; data: UpdatePriorityInput } | { valid: false; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+
+  if (typeof input !== 'object' || input === null) {
+    return { valid: false, errors: { _form: 'Payload tidak valid.' } };
+  }
+
+  const { priority, reason } = input as Record<string, unknown>;
+
+  const allowedPriorities: TicketPriority[] = ['Low', 'Medium', 'High', 'Critical'];
+  if (typeof priority !== 'string' || !allowedPriorities.includes(priority as TicketPriority)) {
+    errors.priority = 'Prioritas harus salah satu dari: Low, Medium, High, Critical.';
+  }
+
+  if (typeof reason !== 'string' || reason.trim().length < 5) {
+    errors.reason = 'Alasan perubahan prioritas wajib diisi (minimal 5 karakter).';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    data: {
+      priority: priority as TicketPriority,
+      reason: (reason as string).trim(),
     },
   };
 }

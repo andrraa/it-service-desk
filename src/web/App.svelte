@@ -7,12 +7,13 @@
   import TicketList from './TicketList.svelte';
   import CreateTicket from './CreateTicket.svelte';
   import TicketDetail from './TicketDetail.svelte';
+  import Dashboard from './Dashboard.svelte';
   import type { User } from '../server/auth';
   import type { Ticket } from '../server/tickets';
 
   let currentUser = $state<User | null>(null);
   let isCheckingAuth = $state(true);
-  let currentView = $state<'overview' | 'register' | 'login' | 'tickets' | 'create-ticket' | 'ticket-detail'>('overview');
+  let currentView = $state<'overview' | 'register' | 'login' | 'tickets' | 'create-ticket' | 'ticket-detail' | 'dashboard'>('overview');
   let selectedTicket = $state<Ticket | null>(null);
 
   async function checkAuth() {
@@ -33,7 +34,7 @@
 
   async function handleLogout() {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } });
     } finally {
       currentUser = null;
       currentView = 'overview';
@@ -70,6 +71,22 @@
       </button>
 
       {#if currentUser}
+        {#if currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin'}
+          <p class="nav-label" style="margin-top: 16px;">OPERASIONAL</p>
+          <button
+            type="button"
+            class="nav-link"
+            class:active={currentView === 'dashboard'}
+            aria-current={currentView === 'dashboard' ? 'page' : undefined}
+            onclick={() => (currentView = 'dashboard')}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+            Dashboard Antrean IT
+          </button>
+        {/if}
+
         <p class="nav-label" style="margin-top: 16px;">LAYANAN TIKET</p>
         <button
           type="button"
@@ -155,6 +172,8 @@
         <strong>
           {currentView === 'overview'
             ? 'Ringkasan'
+            : currentView === 'dashboard'
+            ? 'Dashboard IT'
             : currentView === 'register'
             ? 'Daftar Akun'
             : currentView === 'login'
@@ -184,11 +203,17 @@
           <div class="welcome-banner">
             <div>
               <h3>Selamat datang, {currentUser.username}!</h3>
-              <p>Anda dapat membuat dan memantau tiket kendala melalui menu <strong>Tiket Saya</strong>.</p>
+              <p>Role Anda: <strong>{currentUser.role}</strong>. Akses fitur tiket melalui navigasi sebelah kiri.</p>
             </div>
-            <button type="button" class="btn btn-primary" onclick={() => (currentView = 'create-ticket')}>
-              Laporkan Kendala
-            </button>
+            {#if currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin'}
+              <button type="button" class="btn btn-primary" onclick={() => (currentView = 'dashboard')}>
+                Buka Dashboard IT
+              </button>
+            {:else}
+              <button type="button" class="btn btn-primary" onclick={() => (currentView = 'create-ticket')}>
+                Laporkan Kendala
+              </button>
+            {/if}
           </div>
         {/if}
 
@@ -205,11 +230,19 @@
             <li><span class="step-number">03</span><h3>Closed</h3><p>Solusi dicatat. Percakapan dan lampiran tersimpan sebagai histori.</p></li>
           </ol>
         </section>
+      {:else if currentView === 'dashboard' && currentUser}
+        <Dashboard
+          {currentUser}
+          onSelectTicket={(t) => {
+            selectedTicket = t;
+            currentView = 'ticket-detail';
+          }}
+        />
       {:else if currentView === 'login'}
         <Login
           onSuccess={(user) => {
             currentUser = user;
-            currentView = 'tickets';
+            currentView = user.role === 'User' ? 'tickets' : 'dashboard';
           }}
           onSwitchToRegister={() => (currentView = 'register')}
         />
@@ -240,7 +273,7 @@
           {currentUser}
           onBack={() => {
             selectedTicket = null;
-            currentView = 'tickets';
+            currentView = currentUser.role === 'User' ? 'tickets' : 'dashboard';
           }}
         />
       {/if}

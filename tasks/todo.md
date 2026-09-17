@@ -55,14 +55,14 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `migrations/003_tickets.sql`, `src/server/tickets.ts`, `src/web/Tickets.svelte`, `src/web/TicketDetail.svelte`, `tests/tickets.integration.ts`.
 
 ## 7. Dashboard dan pengambilan tiket
-- [ ] Tampilkan ringkasan, filter, prioritas/FIFO, serta aksi ambil tiket dan koreksi prioritas beralasan.
+- [x] Tampilkan ringkasan, filter, prioritas/FIFO, serta aksi ambil tiket dan koreksi prioritas beralasan.
 - Acceptance: urgensi dahulu/FIFO stabil; tepat satu pengambil berhasil; perubahan prioritas dan penanggung jawab diaudit.
 - Verifikasi: urutan tie-breaker, race claim, role invalid, filter dan counts.
 - Dependensi: 6.
 - File: `migrations/004_audit.sql`, `src/server/tickets.ts`, `src/web/Dashboard.svelte`, `src/web/TicketDetail.svelte`, `tests/tickets.integration.ts`.
 
 ### Checkpoint tiket
-- [ ] Pelaporan dan penanganan nyata berjalan; nomor unik, ownership, dan race condition lulus pengujian.
+- [x] Pelaporan dan penanganan nyata berjalan; nomor unik, ownership, dan race condition lulus pengujian.
 
 ## 8. Percakapan
 - [ ] Tambah pesan dan polling pada tiket aktif.
