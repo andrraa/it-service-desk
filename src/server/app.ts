@@ -1,4 +1,5 @@
 import type { SQL } from 'bun';
+import { join } from 'node:path';
 import {
   validateRegisterInput,
   validateLoginInput,
@@ -18,6 +19,16 @@ import {
   type Ticket,
 } from './tickets';
 import { validateMessageInput, type TicketMessage } from './messages';
+import {
+  detectMimeFromBytes,
+  ensureUploadsDirExists,
+  generateStorageFilename,
+  safeDeleteFile,
+  MAX_FILE_SIZE,
+  MAX_FILES_PER_UPLOAD,
+  ALLOWED_MIME_TYPES,
+  getUploadsDir,
+} from './attachments';
 import { MemoryRateLimiter } from './rate-limit';
 import { validateCsrf } from './csrf';
 
@@ -57,7 +68,7 @@ export interface AppContext {
   rateLimiter?: MemoryRateLimiter;
 }
 
-const defaultAuthRateLimiter = new MemoryRateLimiter(5, 60 * 1000); // 5 attempts per minute
+const defaultAuthRateLimiter = new MemoryRateLimiter(5, 60 * 1000);
 
 export async function handleRequest(request: Request, ctx: AppContext) {
   const url = new URL(request.url);
@@ -527,7 +538,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
     }
 
-    // Verify ticket existence and permissions
     const ticketRows = await ctx.sql`
       SELECT id, creator_id AS "creatorId", status FROM tickets
       WHERE id = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
@@ -540,7 +550,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
     const ticket = ticketRows[0] as { id: number | string; creatorId: number | string; status: string };
 
-    // Access control: User can only view/send messages in their own tickets. IT Staff/Admin can in all.
     if (user.role === 'User' && String(ticket.creatorId) !== String(user.id)) {
       return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke percakapan tiket ini.' } }, 403);
     }
@@ -570,7 +579,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
 
     if (request.method === 'POST') {
-      // PRD: Tiket Closed menolak pengiriman pesan di backend
       if (ticket.status === 'Closed') {
         return json({ error: { code: 'FORBIDDEN', message: 'Tiket telah ditutup dan bersifat read-only. Pesan baru tidak diizinkan.' } }, 403);
       }
@@ -608,6 +616,201 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
 
     return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET, POST' });
+  }
+
+  // Upload Attachment: POST /api/tickets/:id/attachments
+  const uploadMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/attachments$/);
+  if (uploadMatch) {
+    const ticketIdOrNumber = uploadMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (request.method !== 'POST') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
+    }
+
+    const ticketRows = await ctx.sql`
+      SELECT id, creator_id AS "creatorId", status FROM tickets
+      WHERE id = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
+      LIMIT 1
+    `;
+    if (ticketRows.length === 0) {
+      return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
+    }
+
+    const ticket = ticketRows[0] as { id: number | string; creatorId: number | string; status: string };
+
+    if (ticket.status === 'Closed') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Tiket telah ditutup. Tidak dapat mengunggah berkas baru.' } }, 403);
+    }
+
+    if (user.role === 'User' && String(ticket.creatorId) !== String(user.id)) {
+      return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke tiket ini.' } }, 403);
+    }
+
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return json({ error: { code: 'BAD_REQUEST', message: 'Format formulir tidak valid.' } }, 400);
+    }
+
+    const files = formData.getAll('files') as File[];
+    if (files.length === 0) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: 'Tidak ada berkas yang diunggah.' } }, 422);
+    }
+
+    if (files.length > MAX_FILES_PER_UPLOAD) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: `Maksimal ${MAX_FILES_PER_UPLOAD} berkas per pengiriman.` } }, 422);
+    }
+
+    const messageId = formData.get('messageId')?.toString() || null;
+    const uploadsDir = await ensureUploadsDirExists();
+    const savedFiles: { originalName: string; storageName: string; mimeType: string; size: number; fullPath: string }[] = [];
+
+    try {
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          throw new Error(`Ukuran berkas '${file.name}' melebihi batas maksimal 10 MB.`);
+        }
+
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        const detectedMime = detectMimeFromBytes(bytes);
+
+        if (!detectedMime || !ALLOWED_MIME_TYPES.includes(detectedMime)) {
+          throw new Error(`Tipe berkas '${file.name}' tidak didukung atau signature berkas tidak valid. Format yang diizinkan: JPG, PNG, WebP, PDF.`);
+        }
+
+        const storageName = generateStorageFilename(file.name);
+        const fullPath = join(uploadsDir, storageName);
+
+        await Bun.write(fullPath, bytes);
+        savedFiles.push({
+          originalName: file.name,
+          storageName,
+          mimeType: detectedMime,
+          size: file.size,
+          fullPath,
+        });
+      }
+
+      // Persist in DB
+      const insertedRows = [];
+      for (const sf of savedFiles) {
+        const inserted = await ctx.sql`
+          INSERT INTO attachments (ticket_id, message_id, uploader_id, original_name, storage_path, mime_type, file_size)
+          VALUES (${ticket.id}, ${messageId}, ${user.id}, ${sf.originalName}, ${sf.storageName}, ${sf.mimeType}, ${sf.size})
+          RETURNING id, ticket_id AS "ticketId", message_id AS "messageId", uploader_id AS "uploaderId", original_name AS "originalName", mime_type AS "mimeType", file_size AS "fileSize", created_at AS "createdAt"
+        `;
+        insertedRows.push(inserted[0]);
+      }
+
+      return json({ message: 'Berkas berhasil diunggah.', attachments: insertedRows }, 201);
+    } catch (err: any) {
+      // Clean up staged files on disk in case of error
+      for (const sf of savedFiles) {
+        await safeDeleteFile(sf.fullPath);
+      }
+      return json({ error: { code: 'VALIDATION_ERROR', message: err.message || 'Gagal menyimpan berkas.' } }, 422);
+    }
+  }
+
+  // Download / View Attachment: GET /api/attachments/:id
+  const downloadMatch = pathname.match(/^\/api\/attachments\/([^/]+)$/);
+  if (downloadMatch) {
+    const attachmentId = downloadMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (request.method !== 'GET') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET' });
+    }
+
+    try {
+      const rows = await ctx.sql`
+        SELECT a.id, a.ticket_id AS "ticketId", a.original_name AS "originalName", a.storage_path AS "storagePath", a.mime_type AS "mimeType", t.creator_id AS "creatorId"
+        FROM attachments a
+        JOIN tickets t ON a.ticket_id = t.id
+        WHERE a.id = ${attachmentId}
+        LIMIT 1
+      `;
+
+      if (rows.length === 0) {
+        return json({ error: { code: 'NOT_FOUND', message: 'Lampiran tidak ditemukan.' } }, 404);
+      }
+
+      const att = rows[0] as { id: number | string; originalName: string; storagePath: string; mimeType: string; creatorId: number | string };
+
+      // Access control: User can only download their own ticket attachments. IT Staff / Super Admin can download all.
+      if (user.role === 'User' && String(att.creatorId) !== String(user.id)) {
+        return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke berkas ini.' } }, 403);
+      }
+
+      // Path traversal prevention: enforce storage path basename only
+      const safeBasename = att.storagePath.replace(/^.*[\\\/]/, '');
+      const filePath = join(getUploadsDir(), safeBasename);
+
+      const file = Bun.file(filePath);
+      if (!(await file.exists())) {
+        return json({ error: { code: 'NOT_FOUND', message: 'Berkas fisik tidak ditemukan di penyimpanan server.' } }, 404);
+      }
+
+      const isInline = url.searchParams.get('view') === 'inline';
+      const disposition = isInline ? 'inline' : `attachment; filename="${encodeURIComponent(att.originalName)}"`;
+
+      return new Response(file, {
+        headers: {
+          'Content-Type': att.mimeType,
+          'Content-Disposition': disposition,
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-cache',
+        },
+      });
+    } catch (err) {
+      console.error('Download error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengunduh berkas.' } }, 500);
+    }
+  }
+
+  // List Attachments for Ticket: GET /api/tickets/:id/attachments
+  const listAttachmentsMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/attachments$/);
+  if (listAttachmentsMatch && request.method === 'GET') {
+    const ticketIdOrNumber = listAttachmentsMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+
+    try {
+      const ticketRows = await ctx.sql`
+        SELECT id, creator_id AS "creatorId" FROM tickets WHERE id = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber} LIMIT 1
+      `;
+      if (ticketRows.length === 0) return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
+      const ticket = ticketRows[0] as { id: number | string; creatorId: number | string };
+
+      if (user.role === 'User' && String(ticket.creatorId) !== String(user.id)) {
+        return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke berkas tiket ini.' } }, 403);
+      }
+
+      const rows = await ctx.sql`
+        SELECT 
+          a.id, a.ticket_id AS "ticketId", a.message_id AS "messageId", a.uploader_id AS "uploaderId", 
+          u.username AS "uploaderUsername", a.original_name AS "originalName", a.mime_type AS "mimeType", 
+          a.file_size AS "fileSize", a.created_at AS "createdAt"
+        FROM attachments a
+        JOIN users u ON a.uploader_id = u.id
+        WHERE a.ticket_id = ${ticket.id}
+        ORDER BY a.created_at ASC
+      `;
+
+      return json({ attachments: rows });
+    } catch (err) {
+      console.error('List attachments error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil lampiran tiket.' } }, 500);
+    }
   }
 
   // Ticket Routes

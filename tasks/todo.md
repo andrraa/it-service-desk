@@ -72,7 +72,7 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `migrations/005_messages.sql`, `src/server/messages.ts`, `src/web/Conversation.svelte`, `src/web/TicketDetail.svelte`, `tests/messages.integration.ts`.
 
 ## 9a. Penyimpanan lampiran privat
-- [ ] Implementasikan validasi dan penyimpanan file privat serta endpoint download terotorisasi.
+- [x] Implementasikan validasi dan penyimpanan file privat serta endpoint download terotorisasi.
 - Acceptance: ekstensi/MIME/signature dan ukuran/jumlah diperiksa; nama acak; tidak ada public serving; kegagalan membersihkan file staging.
 - Verifikasi: file valid/invalid/oversize, spoofed MIME, path traversal, download lintas user, error persistence.
 - Dependensi: 8.
