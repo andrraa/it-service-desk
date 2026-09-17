@@ -9,7 +9,13 @@ import {
   buildSessionCookie,
   buildClearSessionCookie,
   getSessionUser,
+  type User,
 } from './auth';
+import {
+  validateCreateTicketInput,
+  formatTicketNumber,
+  type Ticket,
+} from './tickets';
 
 export function readConfig(env: Record<string, string | undefined>) {
   const databaseUrl = env.DATABASE_URL ?? '';
@@ -62,6 +68,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
   }
 
+  // Auth Routes
   if (pathname === '/api/auth/register') {
     if (request.method !== 'POST') {
       return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
@@ -164,7 +171,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       }
 
       const sessionId = generateSessionId();
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       await ctx.sql`
         INSERT INTO sessions (id, user_id, expires_at)
@@ -237,6 +244,177 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     return json({ message: 'Logout berhasil.' }, 200, {
       'Set-Cookie': buildClearSessionCookie(),
     });
+  }
+
+  // Authentication Helper for Protected Routes
+  const getAuthUser = async (): Promise<User | null> => {
+    const cookies = parseCookies(request.headers.get('Cookie'));
+    const sessionId = cookies.session_id;
+    if (!sessionId) return null;
+    return await getSessionUser(ctx.sql, sessionId);
+  };
+
+  // Ticket Routes
+  if (pathname === '/api/tickets') {
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+
+    if (request.method === 'POST') {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+      }
+
+      const validation = validateCreateTicketInput(body);
+      if (!validation.valid) {
+        return json({ error: { code: 'VALIDATION_ERROR', message: 'Data tiket tidak valid.', details: validation.errors } }, 422);
+      }
+
+      const { title, description, priority } = validation.data;
+
+      try {
+        const seqResult = await ctx.sql`SELECT nextval('ticket_number_seq') AS seq`;
+        const seq = Number((seqResult[0] as { seq: number | string }).seq);
+        const ticketNumber = formatTicketNumber(seq);
+
+        const inserted = await ctx.sql`
+          INSERT INTO tickets (ticket_number, creator_id, title, description, priority, status)
+          VALUES (${ticketNumber}, ${user.id}, ${title}, ${description}, ${priority}, 'Open')
+          RETURNING 
+            id, 
+            ticket_number AS "ticketNumber", 
+            creator_id AS "creatorId", 
+            title, 
+            description, 
+            priority, 
+            status, 
+            created_at AS "createdAt", 
+            updated_at AS "updatedAt"
+        `;
+
+        const newTicket = inserted[0] as Ticket;
+        return json({ message: 'Tiket berhasil dibuat.', ticket: newTicket }, 201);
+      } catch (err) {
+        console.error('Create ticket error:', err);
+        return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat membuat tiket.' } }, 500);
+      }
+    }
+
+    if (request.method === 'GET') {
+      try {
+        let ticketsQuery;
+        if (user.role === 'User') {
+          ticketsQuery = await ctx.sql`
+            SELECT 
+              t.id, 
+              t.ticket_number AS "ticketNumber", 
+              t.creator_id AS "creatorId", 
+              u.username AS "creatorUsername",
+              u.nik AS "creatorNik",
+              t.assignee_id AS "assigneeId",
+              a.username AS "assigneeUsername",
+              t.title, 
+              t.description, 
+              t.priority, 
+              t.status, 
+              t.created_at AS "createdAt", 
+              t.updated_at AS "updatedAt"
+            FROM tickets t
+            JOIN users u ON t.creator_id = u.id
+            LEFT JOIN users a ON t.assignee_id = a.id
+            WHERE t.creator_id = ${user.id}
+            ORDER BY t.created_at DESC
+          `;
+        } else {
+          // IT Staff or Super Admin: View all tickets
+          ticketsQuery = await ctx.sql`
+            SELECT 
+              t.id, 
+              t.ticket_number AS "ticketNumber", 
+              t.creator_id AS "creatorId", 
+              u.username AS "creatorUsername",
+              u.nik AS "creatorNik",
+              t.assignee_id AS "assigneeId",
+              a.username AS "assigneeUsername",
+              t.title, 
+              t.description, 
+              t.priority, 
+              t.status, 
+              t.created_at AS "createdAt", 
+              t.updated_at AS "updatedAt"
+            FROM tickets t
+            JOIN users u ON t.creator_id = u.id
+            LEFT JOIN users a ON t.assignee_id = a.id
+            ORDER BY t.created_at DESC
+          `;
+        }
+
+        return json({ tickets: ticketsQuery });
+      } catch (err) {
+        console.error('List tickets error:', err);
+        return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengambil daftar tiket.' } }, 500);
+      }
+    }
+
+    return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET, POST' });
+  }
+
+  // Single Ticket Detail: /api/tickets/:id
+  const ticketDetailMatch = pathname.match(/^\/api\/tickets\/([^/]+)$/);
+  if (ticketDetailMatch) {
+    const ticketIdOrNumber = ticketDetailMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+
+    if (request.method !== 'GET') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET' });
+    }
+
+    try {
+      const rows = await ctx.sql`
+        SELECT 
+          t.id, 
+          t.ticket_number AS "ticketNumber", 
+          t.creator_id AS "creatorId", 
+          u.username AS "creatorUsername",
+          u.nik AS "creatorNik",
+          t.assignee_id AS "assigneeId",
+          a.username AS "assigneeUsername",
+          t.title, 
+          t.description, 
+          t.priority, 
+          t.status, 
+          t.created_at AS "createdAt", 
+          t.updated_at AS "updatedAt"
+        FROM tickets t
+        JOIN users u ON t.creator_id = u.id
+        LEFT JOIN users a ON t.assignee_id = a.id
+        WHERE t.id = ${ticketIdOrNumber} OR t.ticket_number = ${ticketIdOrNumber}
+        LIMIT 1
+      `;
+
+      if (rows.length === 0) {
+        return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
+      }
+
+      const ticket = rows[0] as Ticket;
+
+      // Access control: User can only view their own tickets. IT Staff / Super Admin can view all.
+      if (user.role === 'User' && String(ticket.creatorId) !== String(user.id)) {
+        return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke tiket ini.' } }, 403);
+      }
+
+      return json({ ticket });
+    } catch (err) {
+      console.error('Get ticket error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengambil detail tiket.' } }, 500);
+    }
   }
 
   return json({ error: { code: 'NOT_FOUND', message: 'Endpoint tidak ditemukan.' } }, 404);
