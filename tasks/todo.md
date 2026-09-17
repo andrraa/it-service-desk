@@ -24,7 +24,7 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - [x] Toolchain, PostgreSQL, frontend, dan tema terverifikasi; review hasil sebelum autentikasi.
 
 ## 3. Registrasi dengan NIK
-- [ ] Buat akun aktif role User tanpa email.
+- [x] Buat akun aktif role User tanpa email.
 - Acceptance: NIK string mempertahankan leading zero; username case-insensitive unik; request tidak boleh menentukan role; password hash tidak pernah dikembalikan.
 - Verifikasi: test input invalid, duplikat dan concurrent registration, NIK leading zero, form browser.
 - Dependensi: 1–2; persetujuan aturan wajib/unik NIK.

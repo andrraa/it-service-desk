@@ -148,12 +148,17 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
   transition: background-color 0.15s, color 0.15s;
 }
 
