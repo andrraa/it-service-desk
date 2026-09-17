@@ -1,0 +1,267 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import type { Ticket } from '../server/tickets';
+
+  interface Props {
+    onSelectTicket?: (ticket: Ticket) => void;
+    onCreateNewTicket?: () => void;
+  }
+
+  let { onSelectTicket, onCreateNewTicket }: Props = $props();
+
+  let tickets = $state<Ticket[]>([]);
+  let isLoading = $state(true);
+  let errorMessage = $state('');
+
+  async function fetchTickets() {
+    isLoading = true;
+    errorMessage = '';
+    try {
+      const res = await fetch('/api/tickets');
+      if (!res.ok) throw new Error('Gagal mengambil daftar tiket.');
+      const data: any = await res.json();
+      tickets = data.tickets || [];
+    } catch {
+      errorMessage = 'Tidak dapat memuat tiket. Periksa koneksi ke server.';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  onMount(() => {
+    void fetchTickets();
+  });
+</script>
+
+<div class="tickets-container">
+  <div class="tickets-header">
+    <div>
+      <p class="eyebrow">DAFTAR KENDALA</p>
+      <h2>Tiket Saya</h2>
+    </div>
+    <button type="button" class="btn btn-primary" onclick={onCreateNewTicket}>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+      </svg>
+      Buat Tiket Baru
+    </button>
+  </div>
+
+  {#if errorMessage}
+    <div class="alert alert-error" role="alert">
+      <span>{errorMessage}</span>
+      <button type="button" class="btn-retry" onclick={fetchTickets}>Coba lagi</button>
+    </div>
+  {/if}
+
+  {#if isLoading}
+    <div class="loading-state">
+      <p>Memuat daftar tiket…</p>
+    </div>
+  {:else if tickets.length === 0}
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+      </svg>
+      <h3>Belum Ada Tiket</h3>
+      <p>Anda belum membuat tiket kendala. Tekan tombol di bawah untuk melaporkan masalah ke tim IT.</p>
+      <button type="button" class="btn btn-primary" onclick={onCreateNewTicket} style="margin-top: 12px;">
+        Buat Tiket Pertama
+      </button>
+    </div>
+  {:else}
+    <div class="table-card">
+      <table class="tickets-table">
+        <thead>
+          <tr>
+            <th>Nomor</th>
+            <th>Judul Kendala</th>
+            <th>Prioritas</th>
+            <th>Status</th>
+            <th>Penanggung Jawab</th>
+            <th>Waktu Dibuat</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each tickets as ticket}
+            <tr onclick={() => onSelectTicket?.(ticket)}>
+              <td class="cell-number"><strong>{ticket.ticketNumber}</strong></td>
+              <td class="cell-title">
+                <span class="ticket-title-text">{ticket.title}</span>
+              </td>
+              <td>
+                <span class="badge-priority priority-{ticket.priority.toLowerCase()}">
+                  {ticket.priority}
+                </span>
+              </td>
+              <td>
+                <span class="badge-status status-{ticket.status.toLowerCase().replace(' ', '-')}">
+                  {ticket.status}
+                </span>
+              </td>
+              <td>{ticket.assigneeUsername || 'Belum diambil'}</td>
+              <td class="cell-time">{new Date(ticket.createdAt).toLocaleString('id-ID')}</td>
+              <td>
+                <button type="button" class="btn-detail" onclick={(e) => { e.stopPropagation(); onSelectTicket?.(ticket); }}>
+                  Lihat
+                </button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
+</div>
+
+<style>
+  .tickets-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .tickets-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.15s;
+  }
+
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-primary-text);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-primary-hover);
+  }
+
+  .table-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+  }
+
+  .tickets-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.875rem;
+  }
+
+  th {
+    background-color: var(--color-bg);
+    padding: 12px 16px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:hover td {
+    background-color: var(--color-surface-hover);
+    cursor: pointer;
+  }
+
+  .cell-number {
+    font-family: monospace;
+    color: var(--color-primary);
+  }
+
+  .cell-title {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ticket-title-text {
+    font-weight: 500;
+  }
+
+  .cell-time {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .badge-priority {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .priority-low { background-color: rgba(100, 116, 139, 0.15); color: #64748b; }
+  .priority-medium { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
+  .priority-high { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
+  .priority-critical { background-color: rgba(220, 38, 38, 0.15); color: var(--color-danger); }
+
+  .badge-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .status-open { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
+  .status-in-progress { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
+  .status-closed { background-color: rgba(22, 163, 74, 0.15); color: var(--color-success); }
+
+  .btn-detail {
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .empty-state, .loading-state {
+    text-align: center;
+    padding: 48px 24px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+  }
+
+  .empty-state svg {
+    margin-bottom: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .empty-state h3 {
+    color: var(--color-text);
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+  }
+</style>

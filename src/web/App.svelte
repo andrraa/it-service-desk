@@ -4,11 +4,16 @@
   import HealthPanel from './HealthPanel.svelte';
   import Register from './Register.svelte';
   import Login from './Login.svelte';
+  import TicketList from './TicketList.svelte';
+  import CreateTicket from './CreateTicket.svelte';
+  import TicketDetail from './TicketDetail.svelte';
   import type { User } from '../server/auth';
+  import type { Ticket } from '../server/tickets';
 
   let currentUser = $state<User | null>(null);
   let isCheckingAuth = $state(true);
-  let currentView = $state<'overview' | 'register' | 'login' | 'dashboard'>('overview');
+  let currentView = $state<'overview' | 'register' | 'login' | 'tickets' | 'create-ticket' | 'ticket-detail'>('overview');
+  let selectedTicket = $state<Ticket | null>(null);
 
   async function checkAuth() {
     try {
@@ -16,7 +21,6 @@
       if (res.ok) {
         const data: any = await res.json();
         currentUser = data.user;
-        currentView = 'overview';
       } else {
         currentUser = null;
       }
@@ -66,11 +70,13 @@
       </button>
 
       {#if currentUser}
-        <p class="nav-label" style="margin-top: 16px;">LAYANAN</p>
+        <p class="nav-label" style="margin-top: 16px;">LAYANAN TIKET</p>
         <button
           type="button"
           class="nav-link"
-          onclick={() => alert('Fitur Tiket akan hadir pada tahap berikutnya.')}
+          class:active={currentView === 'tickets' || currentView === 'ticket-detail'}
+          aria-current={currentView === 'tickets' ? 'page' : undefined}
+          onclick={() => { currentView = 'tickets'; selectedTicket = null; }}
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
@@ -78,18 +84,18 @@
           Tiket Saya
         </button>
 
-        {#if currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin'}
-          <button
-            type="button"
-            class="nav-link"
-            onclick={() => alert('Dashboard Operasional IT akan hadir pada tahap berikutnya.')}
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-            </svg>
-            Antrean Tiket IT
-          </button>
-        {/if}
+        <button
+          type="button"
+          class="nav-link"
+          class:active={currentView === 'create-ticket'}
+          aria-current={currentView === 'create-ticket' ? 'page' : undefined}
+          onclick={() => (currentView = 'create-ticket')}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Buat Tiket Baru
+        </button>
       {:else if !isCheckingAuth}
         <p class="nav-label" style="margin-top: 16px;">AKUN</p>
         <button
@@ -147,7 +153,17 @@
         <span>Workspace</span>
         <span aria-hidden="true">/</span>
         <strong>
-          {currentView === 'overview' ? 'Ringkasan' : currentView === 'register' ? 'Daftar Akun' : 'Masuk'}
+          {currentView === 'overview'
+            ? 'Ringkasan'
+            : currentView === 'register'
+            ? 'Daftar Akun'
+            : currentView === 'login'
+            ? 'Masuk'
+            : currentView === 'tickets'
+            ? 'Tiket Saya'
+            : currentView === 'create-ticket'
+            ? 'Buat Tiket'
+            : selectedTicket?.ticketNumber || 'Detail Tiket'}
         </strong>
       </div>
       <ThemeToggle />
@@ -168,8 +184,11 @@
           <div class="welcome-banner">
             <div>
               <h3>Selamat datang, {currentUser.username}!</h3>
-              <p>Anda terautentikasi sebagai <strong>{currentUser.role}</strong> (NIK: {currentUser.nik}).</p>
+              <p>Anda dapat membuat dan memantau tiket kendala melalui menu <strong>Tiket Saya</strong>.</p>
             </div>
+            <button type="button" class="btn btn-primary" onclick={() => (currentView = 'create-ticket')}>
+              Laporkan Kendala
+            </button>
           </div>
         {/if}
 
@@ -190,7 +209,7 @@
         <Login
           onSuccess={(user) => {
             currentUser = user;
-            currentView = 'overview';
+            currentView = 'tickets';
           }}
           onSwitchToRegister={() => (currentView = 'register')}
         />
@@ -198,6 +217,31 @@
         <Register
           onSuccess={() => (currentView = 'login')}
           onSwitchToLogin={() => (currentView = 'login')}
+        />
+      {:else if currentView === 'tickets'}
+        <TicketList
+          onCreateNewTicket={() => (currentView = 'create-ticket')}
+          onSelectTicket={(t) => {
+            selectedTicket = t;
+            currentView = 'ticket-detail';
+          }}
+        />
+      {:else if currentView === 'create-ticket'}
+        <CreateTicket
+          onCancel={() => (currentView = 'tickets')}
+          onCreated={(newTicket) => {
+            selectedTicket = newTicket;
+            currentView = 'ticket-detail';
+          }}
+        />
+      {:else if currentView === 'ticket-detail' && selectedTicket && currentUser}
+        <TicketDetail
+          ticketId={selectedTicket.id}
+          {currentUser}
+          onBack={() => {
+            selectedTicket = null;
+            currentView = 'tickets';
+          }}
         />
       {/if}
 
@@ -267,6 +311,10 @@
     border-radius: var(--radius-sm);
     padding: 16px 20px;
     margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
   }
 
   .welcome-banner h3 {
@@ -277,5 +325,25 @@
   .welcome-banner p {
     font-size: 0.85rem;
     color: var(--color-text-muted);
+  }
+
+  .btn {
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-primary-text);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-primary-hover);
   }
 </style>
