@@ -14,17 +14,17 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `package.json`, `tsconfig.json`, `.env.example`, `src/server/index.ts` (lockfile dihasilkan tooling).
 
 ## 2. Shell Svelte dan tema
-- [x] Siapkan frontend responsive dengan toggle Light/Dark Mode.
+- [ ] Siapkan frontend responsive dengan toggle Light/Dark Mode.
 - Acceptance: toggle bekerja di seluruh shell; preferensi bertahan setelah reload; radius 8–12 px dan focus keyboard terlihat.
 - Verifikasi: `bun run check`, `bun run build`, browser nyata desktop/mobile dan kedua tema.
 - Dependensi: 1.
 - File: `vite.config.ts`, `index.html`, `src/web/main.ts`, `src/web/App.svelte`, `src/web/app.css`.
 
 ### Checkpoint fondasi
-- [x] Toolchain, PostgreSQL, frontend, dan tema terverifikasi; review hasil sebelum autentikasi.
+- [ ] Toolchain, PostgreSQL, frontend, dan tema terverifikasi; review hasil sebelum autentikasi.
 
 ## 3. Registrasi dengan NIK
-- [x] Buat akun aktif role User tanpa email.
+- [ ] Buat akun aktif role User tanpa email.
 - Acceptance: NIK string mempertahankan leading zero; username case-insensitive unik; request tidak boleh menentukan role; password hash tidak pernah dikembalikan.
 - Verifikasi: test input invalid, duplikat dan concurrent registration, NIK leading zero, form browser.
 - Dependensi: 1–2; persetujuan aturan wajib/unik NIK.
