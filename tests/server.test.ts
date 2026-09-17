@@ -55,7 +55,7 @@ test('unknown routes and unsupported methods do not query the database', async (
   const missing = await handleRequest(new Request('http://localhost/api/missing'), { sql: mockSql });
   expect(missing.status).toBe(404);
   const wrongMethod = await handleRequest(
-    new Request('http://localhost/api/health', { method: 'POST' }), { sql: mockSql },
+    new Request('http://localhost/api/health', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } }), { sql: mockSql },
   );
   expect(wrongMethod.status).toBe(405);
   expect(wrongMethod.headers.get('Allow')).toBe('GET');

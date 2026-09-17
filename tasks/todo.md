@@ -31,7 +31,7 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `migrations/001_users.sql`, `src/server/auth.ts`, `src/web/Register.svelte`, `tests/auth.integration.ts`, `PRD.md`.
 
 ## 4. Login dan sesi
-- [ ] Implementasikan login/logout, session cookie, rate limit, perlindungan CSRF, dan guard role.
+- [x] Implementasikan login/logout, session cookie, rate limit, perlindungan CSRF, dan guard role.
 - Acceptance: sesi tersimpan aman dan memiliki expiry; nonaktif/expired ditolak; protected API tidak bergantung guard UI.
 - Verifikasi: login benar/salah, cookie flags, CSRF, logout, session expiry, rate limit, akses lintas role.
 - Dependensi: 3.

@@ -15,7 +15,7 @@ describe('POST /api/auth/register', () => {
     const req = new Request('http://localhost/api/auth/register', {
       method: 'POST',
       body: 'invalid-json',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
     });
     const res = await handleRequest(req, { sql: mockSql });
     expect(res.status).toBe(400);
@@ -28,7 +28,7 @@ describe('POST /api/auth/register', () => {
     const req = new Request('http://localhost/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({ nik: '', username: '', password: '123' }),
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
     });
     const res = await handleRequest(req, { sql: mockSql });
     expect(res.status).toBe(422);
@@ -53,7 +53,7 @@ describe('POST /api/auth/register', () => {
         username: 'existing_user',
         password: 'password_super_panjang_123',
       }),
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
     });
     const res = await handleRequest(req, { sql: mockSql });
     expect(res.status).toBe(409);
@@ -89,7 +89,7 @@ describe('POST /api/auth/register', () => {
         username: 'new_employee',
         password: 'password_super_panjang_123',
       }),
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
     });
 
     const res = await handleRequest(req, { sql: mockSql });

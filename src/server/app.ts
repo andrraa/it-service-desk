@@ -16,6 +16,8 @@ import {
   formatTicketNumber,
   type Ticket,
 } from './tickets';
+import { MemoryRateLimiter } from './rate-limit';
+import { validateCsrf } from './csrf';
 
 export function readConfig(env: Record<string, string | undefined>) {
   const databaseUrl = env.DATABASE_URL ?? '';
@@ -50,11 +52,22 @@ export function json(body: unknown, status = 200, extraHeaders: Record<string, s
 
 export interface AppContext {
   sql: SQL;
+  rateLimiter?: MemoryRateLimiter;
 }
+
+const defaultAuthRateLimiter = new MemoryRateLimiter(5, 60 * 1000); // 5 attempts per minute
 
 export async function handleRequest(request: Request, ctx: AppContext) {
   const url = new URL(request.url);
   const pathname = url.pathname;
+  const rateLimiter = ctx.rateLimiter ?? defaultAuthRateLimiter;
+
+  // CSRF validation on mutating requests
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+    if (!validateCsrf(request)) {
+      return json({ error: { code: 'CSRF_ERROR', message: 'Permintaan ditolak: Header CSRF tidak valid.' } }, 403);
+    }
+  }
 
   if (pathname === '/api/health') {
     if (request.method !== 'GET') {
@@ -127,6 +140,18 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
     }
 
+    // Rate limiting key: IP or header
+    const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
+    const rateCheck = rateLimiter.isAllowed(`login:${ip}`);
+    if (!rateCheck.allowed) {
+      return json({
+        error: {
+          code: 'TOO_MANY_REQUESTS',
+          message: `Terlalu banyak percobaan login. Silakan tunggu ${rateCheck.retryAfterSeconds} detik lagi.`,
+        },
+      }, 429, { 'Retry-After': String(rateCheck.retryAfterSeconds) });
+    }
+
     let body: unknown;
     try {
       body = await request.json();
@@ -172,6 +197,9 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       if (!isPasswordValid) {
         return json({ error: { code: 'UNAUTHORIZED', message: 'Username atau password salah.' } }, 401);
       }
+
+      // Successful login resets rate limit attempts
+      rateLimiter.reset(`login:${ip}`);
 
       const sessionId = generateSessionId();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

@@ -37,7 +37,7 @@ describe('Auth Endpoints (Login, Me, Logout)', () => {
     const req = new Request('http://localhost/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username: 'johndoe', password: validPass }),
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
     });
 
     const res = await handleRequest(req, { sql: mockSql });
@@ -71,7 +71,7 @@ describe('Auth Endpoints (Login, Me, Logout)', () => {
     const req = new Request('http://localhost/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username: 'johndoe', password: 'wrongPassword123' }),
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
     });
 
     const res = await handleRequest(req, { sql: mockSql });
@@ -109,7 +109,7 @@ describe('Auth Endpoints (Login, Me, Logout)', () => {
     const mockSql = createMockSql(() => []);
     const req = new Request('http://localhost/api/auth/logout', {
       method: 'POST',
-      headers: { Cookie: 'session_id=dummy_token_123' },
+      headers: { Cookie: 'session_id=dummy_token_123', 'X-Requested-With': 'fetch' },
     });
 
     const res = await handleRequest(req, { sql: mockSql });

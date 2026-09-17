@@ -15,7 +15,7 @@ describe('Ticket Endpoints (/api/tickets)', () => {
     const req = new Request('http://localhost/api/tickets', {
       method: 'POST',
       body: JSON.stringify({ title: 'Kendala Jaringan', description: 'Koneksi internet lambat di lantai 2', priority: 'High' }),
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
     });
 
     const res = await handleRequest(req, { sql: mockSql });
@@ -55,6 +55,7 @@ describe('Ticket Endpoints (/api/tickets)', () => {
       }),
       headers: {
         'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
         Cookie: 'session_id=valid_token',
       },
     });
