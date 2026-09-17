@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { modal } from './modal';
   import type { Ticket, TicketPriority } from '../server/tickets';
   import type { User } from '../server/auth';
 
@@ -17,12 +18,7 @@
     closedTodayCount: number;
   }
 
-  let summary = $state<Summary>({
-    openCount: 0,
-    inProgressCount: 0,
-    criticalActiveCount: 0,
-    closedTodayCount: 0,
-  });
+  let summary = $state<Summary | null>(null);
 
   let queue = $state<Ticket[]>([]);
   let isLoading = $state(true);
@@ -34,6 +30,11 @@
   let unassignedOnly = $state(false);
   let assignedToMe = $state(false);
   let searchQuery = $state('');
+  let assignee = $state('');
+  let assignees = $state<{ id: string; username: string }[]>([]);
+  let page = $state(1);
+  let hasMore = $state(false);
+  let generation = 0;
 
   // Priority correction modal
   let ticketToReprioritize = $state<Ticket | null>(null);
@@ -42,7 +43,8 @@
   let reprioritizeError = $state('');
   let isUpdatingPriority = $state(false);
 
-  async function fetchDashboardData() {
+  async function fetchDashboardData(nextPage = 1) {
+    const requestGeneration = ++generation;
     isLoading = true;
     errorMessage = '';
     try {
@@ -50,6 +52,7 @@
       const sumRes = await fetch('/api/dashboard/summary');
       if (!sumRes.ok) throw new Error('Gagal memuat ringkasan dashboard.');
       const sumData: any = await sumRes.json();
+      if (requestGeneration !== generation) return;
       summary = sumData.summary;
 
       // 2. Fetch queue
@@ -59,15 +62,21 @@
       if (unassignedOnly) queueUrl.searchParams.set('unassigned', 'true');
       if (assignedToMe) queueUrl.searchParams.set('assignedToMe', 'true');
       if (searchQuery.trim()) queueUrl.searchParams.set('q', searchQuery.trim());
+      if (assignee) queueUrl.searchParams.set('assignee', assignee);
+      queueUrl.searchParams.set('page', String(nextPage));
 
       const qRes = await fetch(queueUrl.toString());
       if (!qRes.ok) throw new Error('Gagal memuat antrean tiket.');
       const qData: any = await qRes.json();
+      if (requestGeneration !== generation) return;
       queue = qData.queue || [];
+      assignees = qData.assignees || [];
+      page = qData.pagination.page;
+      hasMore = qData.pagination.hasMore;
     } catch (err: any) {
-      errorMessage = err.message || 'Gagal memuat data dashboard.';
+      if (requestGeneration === generation) errorMessage = err.message || 'Gagal memuat data dashboard.';
     } finally {
-      isLoading = false;
+      if (requestGeneration === generation) isLoading = false;
     }
   }
 
@@ -157,29 +166,43 @@
   <div class="metrics-grid">
     <div class="metric-card">
       <span class="metric-label">Tiket Baru (Open)</span>
-      <strong class="metric-value">{summary.openCount}</strong>
+      <strong class="metric-value">{summary?.openCount ?? '—'}</strong>
       <span class="metric-sub">Menunggu diambil</span>
     </div>
     <div class="metric-card">
       <span class="metric-label">In Progress</span>
-      <strong class="metric-value">{summary.inProgressCount}</strong>
+      <strong class="metric-value">{summary?.inProgressCount ?? '—'}</strong>
       <span class="metric-sub">Sedang ditangani IT</span>
     </div>
     <div class="metric-card metric-critical">
       <span class="metric-label">Aktif Critical</span>
-      <strong class="metric-value">{summary.criticalActiveCount}</strong>
+      <strong class="metric-value">{summary?.criticalActiveCount ?? '—'}</strong>
       <span class="metric-sub">Urgensi tertinggi</span>
     </div>
     <div class="metric-card">
       <span class="metric-label">Selesai Hari Ini</span>
-      <strong class="metric-value">{summary.closedTodayCount}</strong>
+      <strong class="metric-value">{summary?.closedTodayCount ?? '—'}</strong>
       <span class="metric-sub">Tiket Closed</span>
     </div>
   </div>
 
   <!-- Filters Bar -->
   <div class="filter-panel">
+    <form class="filter-row" onsubmit={(event) => { event.preventDefault(); void fetchDashboardData(); }}>
+      <div class="filter-group">
+        <label for="queue-search">Cari nomor atau judul tiket</label>
+        <input id="queue-search" type="search" bind:value={searchQuery} />
+      </div>
+      <button type="submit" class="btn btn-secondary">Cari</button>
+    </form>
     <div class="filter-row">
+      <div class="filter-group">
+        <label for="queue-assignee">Penanggung jawab</label>
+        <select id="queue-assignee" bind:value={assignee} onchange={() => fetchDashboardData()}>
+          <option value="">Semua petugas</option>
+          {#each assignees as person}<option value={String(person.id)}>{person.username}</option>{/each}
+        </select>
+      </div>
       <div class="filter-group">
         <label for="f-status">Status</label>
         <select id="f-status" bind:value={statusFilter} onchange={() => fetchDashboardData()}>
@@ -224,12 +247,12 @@
     <div class="loading-state">
       <p>Memuat antrean operasional…</p>
     </div>
-  {:else if queue.length === 0}
+  {:else if !errorMessage && queue.length === 0}
     <div class="empty-state">
       <h3>Antrean Kosong</h3>
       <p>Tidak ada tiket aktif yang memerlukan penanganan sesuai filter yang dipilih.</p>
     </div>
-  {:else}
+  {:else if queue.length > 0}
     <div class="table-card">
       <table class="queue-table">
         <thead>
@@ -246,11 +269,11 @@
         </thead>
         <tbody>
           {#each queue as ticket}
-            <tr onclick={() => onSelectTicket?.(ticket)}>
+            <tr>
               <td class="cell-number"><strong>{ticket.ticketNumber}</strong></td>
               <td>{ticket.creatorUsername} ({ticket.creatorNik})</td>
               <td class="cell-title">
-                <span class="ticket-title-text">{ticket.title}</span>
+                <button class="ticket-link" type="button" onclick={() => onSelectTicket?.(ticket)}>{ticket.title}</button>
               </td>
               <td>
                 <span class="badge-priority priority-{ticket.priority.toLowerCase()}">
@@ -263,7 +286,7 @@
                 </span>
               </td>
               <td>{ticket.assigneeUsername || '— Belum ada —'}</td>
-              <td class="cell-time">{new Date(ticket.createdAt).toLocaleString('id-ID')}</td>
+              <td class="cell-time">{new Date(ticket.createdAt).toLocaleString('id-ID')}<br /><small>Usia: {Math.max(0, Math.floor((Date.now() - new Date(ticket.createdAt).getTime()) / 60000))} menit</small></td>
               <td class="cell-actions">
                 {#if ticket.status === 'Open' && !ticket.assigneeId}
                   <button type="button" class="btn-action btn-claim" onclick={(e) => handleClaim(ticket, e)}>
@@ -281,17 +304,18 @@
     </div>
   {/if}
 
+  {#if page > 1 || hasMore}
+    <nav class="filter-row" aria-label="Halaman antrean">
+      <button class="btn btn-secondary" disabled={isLoading || page === 1} onclick={() => fetchDashboardData(page - 1)}>Sebelumnya</button>
+      <span>Halaman {page}</span>
+      <button class="btn btn-secondary" disabled={isLoading || !hasMore} onclick={() => fetchDashboardData(page + 1)}>Berikutnya</button>
+    </nav>
+  {/if}
+
   <!-- Priority Correction Modal -->
   {#if ticketToReprioritize}
-    <div
-      class="modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-prio-title"
-      tabindex="-1"
-      onkeydown={(e) => { if (e.key === 'Escape') ticketToReprioritize = null; }}
-    >
-      <div class="modal-card">
+    <dialog class="modal-card" use:modal aria-labelledby="modal-prio-title"
+      oncancel={(event) => { if (isUpdatingPriority) event.preventDefault(); else ticketToReprioritize = null; }}>
         <h3 id="modal-prio-title">Koreksi Tingkat Prioritas</h3>
         <p class="modal-sub">
           Tiket: <strong>{ticketToReprioritize.ticketNumber}</strong> — {ticketToReprioritize.title}
@@ -326,12 +350,11 @@
           <button type="button" class="btn btn-primary" disabled={isUpdatingPriority} onclick={submitPriorityChange}>
             {isUpdatingPriority ? 'Menyimpan…' : 'Simpan Perubahan'}
           </button>
-          <button type="button" class="btn btn-secondary" onclick={() => (ticketToReprioritize = null)}>
+          <button type="button" class="btn btn-secondary" disabled={isUpdatingPriority} onclick={() => (ticketToReprioritize = null)}>
             Batal
           </button>
         </div>
-      </div>
-    </div>
+    </dialog>
   {/if}
 </div>
 
@@ -407,7 +430,7 @@
     color: var(--color-text-muted);
   }
 
-  select, textarea {
+  select, textarea, input[type='search'] {
     padding: 8px 12px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
@@ -514,24 +537,12 @@
     font-weight: 600;
   }
 
-  .priority-low { background-color: rgba(100, 116, 139, 0.15); color: #64748b; }
-  .priority-medium { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
-  .priority-high { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
-  .priority-critical { background-color: rgba(220, 38, 38, 0.15); color: var(--color-danger); }
 
-  .status-open { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
-  .status-in-progress { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
 
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-    padding: 20px;
-  }
+  dialog::backdrop { background: rgb(0 0 0 / 50%); }
+  dialog { margin: auto; color: var(--color-text); max-height: calc(100dvh - 32px); overflow: auto; }
+  .ticket-link { color: var(--color-primary); background: none; border: 0; text-decoration: underline; text-align: left; cursor: pointer; white-space: normal; }
+  form.filter-row { margin-bottom: 16px; }
 
   .modal-card {
     background-color: var(--color-surface);
@@ -539,7 +550,7 @@
     border-radius: var(--radius-md);
     padding: 24px;
     max-width: 480px;
-    width: 100%;
+    width: calc(100% - 32px);
   }
 
   .modal-sub {

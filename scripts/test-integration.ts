@@ -6,7 +6,7 @@ import { testDatabaseUrl } from '../tests/database';
 testDatabaseUrl(process.env); // Refuse unsafe targets before starting any test.
 const uploads = await mkdtemp(join(tmpdir(), 'service-desk-test-'));
 try {
-  const files = [...new Bun.Glob('tests/*.integration.ts').scanSync('.')];
+  const files = [...new Bun.Glob('tests/*.integration.ts').scanSync('.')].map(file => `./${file}`);
   const child = Bun.spawn([process.execPath, 'test', ...files], {
     env: { ...process.env, UPLOADS_DIR: uploads },
     stdout: 'inherit', stderr: 'inherit',

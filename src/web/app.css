@@ -4,12 +4,21 @@
   --color-surface-hover: #f1f5f9;
   --color-border: #e2e8f0;
   --color-text: #0f172a;
-  --color-text-muted: #64748b;
+  --color-text-muted: #475569;
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-text: #ffffff;
-  --color-danger: #dc2626;
-  --color-success: #16a34a;
+  --color-danger: #991b1b;
+  --color-danger-bg: #fee2e2;
+  --color-success: #166534;
+  --color-success-bg: #dcfce7;
+  --color-warning: #92400e;
+  --color-warning-bg: #fef3c7;
+  --color-info: #1e40af;
+  --color-info-bg: #dbeafe;
+  --color-neutral: #475569;
+  --color-neutral-bg: #f1f5f9;
+  color-scheme: light;
   --radius-sm: 8px;
   --radius-md: 10px;
   --radius-lg: 12px;
@@ -23,11 +32,20 @@
   --color-border: #24324d;
   --color-text: #f8fafc;
   --color-text-muted: #94a3b8;
-  --color-primary: #3b82f6;
-  --color-primary-hover: #60a5fa;
-  --color-primary-text: #ffffff;
-  --color-danger: #ef4444;
-  --color-success: #22c55e;
+  --color-primary: #93c5fd;
+  --color-primary-hover: #bfdbfe;
+  --color-primary-text: #0f172a;
+  --color-danger: #fecaca;
+  --color-danger-bg: #7f1d1d;
+  --color-success: #bbf7d0;
+  --color-success-bg: #14532d;
+  --color-warning: #fde68a;
+  --color-warning-bg: #78350f;
+  --color-info: #bfdbfe;
+  --color-info-bg: #1e3a8a;
+  --color-neutral: #cbd5e1;
+  --color-neutral-bg: #334155;
+  color-scheme: dark;
 }
 
 * {
@@ -49,6 +67,15 @@ body {
 button, input, select, textarea {
   font: inherit;
 }
+button, select, input:not([type='checkbox']):not([type='radio']) { min-height: 44px; }
+button { min-width: 44px; }
+input, select, textarea { max-width: 100%; }
+input:not([type='checkbox']):not([type='radio']), select, textarea { border-color: var(--color-text-muted) !important; }
+.priority-low, .status-open { background: var(--color-neutral-bg); color: var(--color-neutral); }
+.priority-medium { background: var(--color-info-bg); color: var(--color-info); }
+.priority-high, .status-in-progress { background: var(--color-warning-bg); color: var(--color-warning); }
+.priority-critical { background: var(--color-danger-bg); color: var(--color-danger); }
+.status-closed { background: var(--color-success-bg); color: var(--color-success); }
 
 :focus-visible {
   outline: 2px solid var(--color-primary);

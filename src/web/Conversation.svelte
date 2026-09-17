@@ -8,9 +8,10 @@
     ticketId: string;
     ticketStatus: string;
     currentUser: User;
+    onClosed?: () => void;
   }
 
-  let { ticketId, ticketStatus, currentUser }: Props = $props();
+  let { ticketId, ticketStatus, currentUser, onClosed }: Props = $props();
 
   let messages = $state<TicketMessage[]>([]);
   let newMessage = $state('');
@@ -18,8 +19,13 @@
   let isSending = $state(false);
   let errorMessage = $state('');
   let sendError = $state('');
+  let deliveryUncertain = $state(false);
 
-  let pollingInterval: any = null;
+  let requestId = crypto.randomUUID();
+  let hasOlder = $state(false);
+  let isFetching = $state(false);
+  let remotelyClosed = $state(false);
+  const isClosed = $derived(ticketStatus === 'Closed' || remotelyClosed);
 
   function handleChatFiles(e: Event) {
     const target = e.target as HTMLInputElement;
@@ -47,19 +53,27 @@
     selectedFiles = selectedFiles.filter((_, i) => i !== index);
   }
 
-  async function fetchMessages(silent = false) {
-    if (!silent) errorMessage = '';
+  async function fetchMessages(older = false) {
+    if (isFetching) return;
+    isFetching = true;
+    errorMessage = '';
     try {
-      const res = await fetch(`/api/tickets/${ticketId}/messages`);
-      if (!res.ok) {
-        if (!silent) errorMessage = 'Gagal memuat percakapan tiket.';
-        return;
-      }
-      const data: any = await res.json();
-      messages = data.messages || [];
-    } catch {
-      if (!silent) errorMessage = 'Koneksi terganggu saat memuat pesan.';
-    }
+      const url = new URL(`/api/tickets/${ticketId}/messages`, window.location.origin);
+      const cursor = older ? messages[0]?.id : messages.at(-1)?.id;
+      if (cursor) url.searchParams.set(older ? 'before' : 'after', String(cursor));
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Gagal memuat percakapan tiket.');
+      const data = await res.json();
+      const incoming: TicketMessage[] = data.messages;
+      const byId = new Map(messages.map(message => [String(message.id), message]));
+      for (const message of incoming) byId.set(String(message.id), message);
+      messages = [...byId.values()].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+      if (older || !cursor) hasOlder = data.pagination.hasMore;
+      if (data.ticketStatus === 'Closed' && !isClosed) onClosed?.();
+      remotelyClosed = data.ticketStatus === 'Closed';
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Koneksi terganggu saat memuat pesan.';
+    } finally { isFetching = false; }
   }
 
   async function handleSendMessage(e: Event) {
@@ -68,54 +82,37 @@
     if (!textToSend && selectedFiles.length === 0) return;
 
     isSending = true;
+    deliveryUncertain = true;
     sendError = '';
 
     try {
-      // 1. Post text message (or placeholder if only attachments)
-      const res = await fetch(`/api/tickets/${ticketId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'fetch',
-        },
-        body: JSON.stringify({ messageText: textToSend || '(Lampiran dikirim)' }),
-      });
-
-      const data: any = await res.json();
-
+      let res: Response;
+      if (selectedFiles.length) {
+        const form = new FormData();
+        form.append('messageText', textToSend);
+        form.append('uploadId', requestId);
+        for (const file of selectedFiles) form.append('files', file);
+        // Text and files commit together; attachment-only messages need no placeholder.
+        res = await fetch(`/api/tickets/${ticketId}/attachments`, { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: form });
+      } else {
+        res = await fetch(`/api/tickets/${ticketId}/messages`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+          body: JSON.stringify({ messageText: textToSend, requestId }),
+        });
+      }
+      const data = await res.json();
       if (!res.ok) {
-        sendError = data.error?.message || 'Gagal mengirim pesan.';
+        if (res.status < 500) deliveryUncertain = false;
+        sendError = data.error?.message || 'Gagal mengirim. Draft dan berkas tetap tersedia.';
         return;
       }
-
-      const createdMsg = data.data;
-
-      // 2. Upload attachments associated with this message
-      if (selectedFiles.length > 0) {
-        const formData = new FormData();
-        formData.append('messageId', createdMsg.id);
-        for (const file of selectedFiles) {
-          formData.append('files', file);
-        }
-
-        const uploadRes = await fetch(`/api/tickets/${ticketId}/attachments`, {
-          method: 'POST',
-          headers: { 'X-Requested-With': 'fetch' },
-          body: formData,
-        });
-
-        if (!uploadRes.ok) {
-          const uploadData: any = await uploadRes.json();
-          sendError = `Pesan terkirim, tetapi lampiran gagal: ${uploadData.error?.message || 'Kesalahan upload'}`;
-        }
-      }
-
-      // Reset
+      deliveryUncertain = false;
       newMessage = '';
       selectedFiles = [];
-      await fetchMessages(true);
+      requestId = crypto.randomUUID();
+      await fetchMessages();
     } catch {
-      sendError = 'Koneksi terputus saat mengirim pesan. Draft Anda tetap tersimpan.';
+      sendError = 'Kiriman belum terkonfirmasi. Draft dan berkas tetap tersimpan; tekan Kirim untuk mencoba kembali tanpa duplikat.';
     } finally {
       isSending = false;
     }
@@ -123,15 +120,10 @@
 
   onMount(() => {
     void fetchMessages();
-    if (ticketStatus !== 'Closed') {
-      pollingInterval = setInterval(() => {
-        void fetchMessages(true);
-      }, 4000);
-    }
-
-    return () => {
-      if (pollingInterval) clearInterval(pollingInterval);
-    };
+    const interval = setInterval(() => {
+      if (!isClosed && document.visibilityState === 'visible') void fetchMessages();
+    }, 4000);
+    return () => clearInterval(interval);
   });
 </script>
 
@@ -140,8 +132,8 @@
     <div class="header-info">
       <h3>Ruang Percakapan Tiket</h3>
       <span class="polling-indicator">
-        <span class="pulse-dot" class:active={ticketStatus !== 'Closed'}></span>
-        {ticketStatus === 'Closed' ? 'Tiket Closed (Read-Only)' : 'Pembaruan otomatis aktif (4d)'}
+        <span class="pulse-dot" class:active={!isClosed}></span>
+        {isClosed ? 'Tiket Closed (Read-Only)' : 'Pembaruan otomatis setiap 4 detik'}
       </span>
     </div>
   </div>
@@ -151,6 +143,10 @@
       <span>{errorMessage}</span>
       <button type="button" class="btn-retry" onclick={() => fetchMessages()}>Coba lagi</button>
     </div>
+  {/if}
+
+  {#if hasOlder}
+    <button type="button" class="btn-retry" disabled={isFetching} onclick={() => fetchMessages(true)}>Muat pesan sebelumnya</button>
   {/if}
 
   <!-- Messages Flow -->
@@ -182,7 +178,7 @@
   </div>
 
   <!-- Send Form or Read-Only Notice -->
-  {#if ticketStatus === 'Closed'}
+  {#if isClosed}
     <div class="closed-notice">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -202,31 +198,35 @@
           {#each selectedFiles as f, idx}
             <span class="file-chip">
               {f.name} ({(f.size / 1024).toFixed(0)} KB)
-              <button type="button" class="btn-del-chip" onclick={() => removeChatFile(idx)}>&times;</button>
+              <button type="button" class="btn-del-chip" aria-label={`Hapus lampiran ${f.name}`} disabled={isSending || deliveryUncertain} onclick={() => removeChatFile(idx)}>&times;</button>
             </span>
           {/each}
         </div>
       {/if}
 
       <div class="input-row">
-        <label class="btn-attach" title="Lampirkan berkas (gambar/PDF)">
+        <label class="btn-attach" for="chat-files">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
           </svg>
+          <span>Lampirkan berkas</span>
           <input
+            id="chat-files"
             type="file"
             multiple
             accept=".jpg,.jpeg,.png,.webp,.pdf"
             onchange={handleChatFiles}
-            disabled={isSending || selectedFiles.length >= 5}
-            style="display: none;"
+            disabled={isSending || deliveryUncertain || selectedFiles.length >= 5}
+            class="sr-only"
           />
         </label>
+        <label class="sr-only" for="chat-message">Pesan</label>
         <textarea
+          id="chat-message"
           rows="2"
           bind:value={newMessage}
           placeholder="Tulis pesan atau tanggapan kendala…"
-          disabled={isSending}
+          disabled={isSending || deliveryUncertain}
         ></textarea>
         <button type="submit" class="btn btn-primary" disabled={isSending || (!newMessage.trim() && selectedFiles.length === 0)}>
           {isSending ? 'Mengirim…' : 'Kirim'}
@@ -238,6 +238,7 @@
 </div>
 
 <style>
+  .btn-attach:focus-within { outline: 2px solid var(--color-primary); outline-offset: 2px; }
   .conversation-card {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);

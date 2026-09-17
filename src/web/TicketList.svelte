@@ -5,12 +5,16 @@
   interface Props {
     onSelectTicket?: (ticket: Ticket) => void;
     onCreateNewTicket?: () => void;
+    canViewAll?: boolean;
   }
 
-  let { onSelectTicket, onCreateNewTicket }: Props = $props();
+  let { onSelectTicket, onCreateNewTicket, canViewAll = false }: Props = $props();
 
   let tickets = $state<Ticket[]>([]);
   let searchQuery = $state('');
+  let statusFilter = $state('');
+  let allTickets = $state(false);
+  let generation = 0;
   let page = $state(1);
   let totalPages = $state(1);
   let totalTickets = $state(0);
@@ -18,12 +22,15 @@
   let errorMessage = $state('');
 
   async function fetchTickets(targetPage = page, query = searchQuery) {
+    const currentGeneration = ++generation;
     isLoading = true;
     errorMessage = '';
     try {
       const url = new URL('/api/tickets', window.location.origin);
       url.searchParams.set('page', String(targetPage));
       url.searchParams.set('limit', '10');
+      if (statusFilter) url.searchParams.set('status', statusFilter);
+      if (!allTickets) url.searchParams.set('mine', 'true');
       if (query.trim()) {
         url.searchParams.set('q', query.trim());
       }
@@ -31,6 +38,7 @@
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error('Gagal mengambil daftar tiket.');
       const data: any = await res.json();
+      if (currentGeneration !== generation) return;
       tickets = data.tickets || [];
       if (data.pagination) {
         page = data.pagination.page;
@@ -38,9 +46,9 @@
         totalTickets = data.pagination.total;
       }
     } catch {
-      errorMessage = 'Tidak dapat memuat tiket. Periksa koneksi ke server.';
+      if (currentGeneration === generation) errorMessage = 'Tidak dapat memuat tiket. Periksa koneksi ke server.';
     } finally {
-      isLoading = false;
+      if (currentGeneration === generation) isLoading = false;
     }
   }
 
@@ -65,7 +73,7 @@
   <div class="tickets-header">
     <div>
       <p class="eyebrow">DAFTAR KENDALA</p>
-      <h2>Tiket Saya</h2>
+      <h2>{allTickets ? 'Semua Tiket' : 'Tiket Saya'}</h2>
       <p class="section-desc">Pantau progres laporan tiket kendala yang telah Anda buat.</p>
     </div>
     <button type="button" class="btn btn-primary" onclick={onCreateNewTicket}>
@@ -83,6 +91,7 @@
       </svg>
       <input
         type="search"
+        aria-label="Cari tiket"
         bind:value={searchQuery}
         placeholder="Cari nomor tiket, judul, atau deskripsi…"
       />
@@ -95,6 +104,15 @@
     {/if}
   </form>
 
+  <div class="list-filters">
+    <label for="list-status">Status</label>
+    <select id="list-status" bind:value={statusFilter} onchange={() => fetchTickets(1)}>
+      <option value="">Semua status</option>
+      <option>Open</option><option>In Progress</option><option value="Closed">Closed — Histori</option>
+    </select>
+    {#if canViewAll}<label><input type="checkbox" bind:checked={allTickets} onchange={() => fetchTickets(1)} /> Semua tiket yang dapat saya akses</label>{/if}
+  </div>
+
   {#if errorMessage}
     <div class="alert alert-error" role="alert">
       <span>{errorMessage}</span>
@@ -106,7 +124,7 @@
     <div class="loading-state">
       <p>Memuat daftar tiket…</p>
     </div>
-  {:else if tickets.length === 0}
+  {:else if !errorMessage && tickets.length === 0}
     <div class="empty-state">
       <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
@@ -191,6 +209,8 @@
 </div>
 
 <style>
+  .list-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .list-filters select { padding: 8px; background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
   .tickets-container {
     display: flex;
     flex-direction: column;
@@ -338,10 +358,6 @@
     font-weight: 600;
   }
 
-  .priority-low { background-color: rgba(100, 116, 139, 0.15); color: #64748b; }
-  .priority-medium { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
-  .priority-high { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
-  .priority-critical { background-color: rgba(220, 38, 38, 0.15); color: var(--color-danger); }
 
   .badge-status {
     display: inline-block;
@@ -351,9 +367,6 @@
     font-weight: 600;
   }
 
-  .status-open { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
-  .status-in-progress { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
-  .status-closed { background-color: rgba(22, 163, 74, 0.15); color: var(--color-success); }
 
   .btn-detail {
     padding: 4px 10px;

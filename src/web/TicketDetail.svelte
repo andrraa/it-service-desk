@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { modal } from './modal';
   import Conversation from './Conversation.svelte';
   import Attachments from './Attachments.svelte';
   import type { Ticket } from '../server/tickets';
@@ -17,6 +18,26 @@
   let ticketAttachments = $state<any[]>([]);
   let isLoading = $state(true);
   let errorMessage = $state('');
+  let history = $state<{ id: string; action: string; actorUsername: string; createdAt: string; reason: string; oldValue: unknown; newValue: unknown }[]>([]);
+  let historyError = $state('');
+  let hasMoreHistory = $state(false);
+  let loadingHistory = $state(false);
+
+  async function fetchHistory(reset = false) {
+    if (loadingHistory) return;
+    loadingHistory = true;
+    historyError = '';
+    try {
+      const url = new URL(`/api/tickets/${ticketId}/history`, window.location.origin);
+      if (!reset && history.length) url.searchParams.set('before', String(history.at(-1)!.id));
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Gagal memuat histori penanganan.');
+      const data = await response.json();
+      history = reset ? data.history : [...history, ...data.history];
+      hasMoreHistory = data.hasMore;
+    } catch (error) { historyError = error instanceof Error ? error.message : 'Gagal memuat histori.'; }
+    finally { loadingHistory = false; }
+  }
 
   // Close modal
   let showCloseModal = $state(false);
@@ -45,7 +66,10 @@
       if (resAtt.ok) {
         const dataAtt: any = await resAtt.json();
         ticketAttachments = (dataAtt.attachments || []).filter((a: any) => !a.messageId);
+      } else {
+        errorMessage = 'Gagal memuat lampiran. Coba muat ulang; ini bukan berarti tiket tidak memiliki lampiran.';
       }
+      await fetchHistory(true);
     } catch (err: any) {
       errorMessage = err.message || 'Terjadi kesalahan sistem.';
     } finally {
@@ -114,6 +138,7 @@
   {#if errorMessage}
     <div class="alert alert-error" role="alert">
       <span>{errorMessage}</span>
+      <button type="button" onclick={fetchTicketDetail}>Coba lagi</button>
     </div>
   {/if}
 
@@ -182,25 +207,35 @@
       {/if}
     </div>
 
+    <details class="ticket-content-card">
+      <summary>Aktivitas Penanganan</summary>
+      {#if historyError}<p role="alert">{historyError}</p><button disabled={loadingHistory} onclick={() => fetchHistory(history.length === 0)}>Coba lagi</button>{/if}
+      <ol class="history-list">
+        {#each history as activity}
+          <li>
+            <strong>{activity.actorUsername}</strong> · {new Date(activity.createdAt).toLocaleString('id-ID')}
+            <p>{({ CLAIM_TICKET: 'Mengambil tiket', CHANGE_PRIORITY: 'Mengubah prioritas', CLOSE_TICKET: 'Menutup tiket' } as Record<string, string>)[activity.action] || activity.action}</p>
+            <p>{JSON.stringify(activity.oldValue)} → {JSON.stringify(activity.newValue)}</p>
+            <p>{activity.reason}</p>
+          </li>
+        {/each}
+      </ol>
+      {#if hasMoreHistory}<button disabled={loadingHistory} onclick={() => fetchHistory()}>Muat aktivitas sebelumnya</button>{/if}
+    </details>
+
     <!-- Live Conversation & Polling -->
     <Conversation
       ticketId={ticket.id}
       ticketStatus={ticket.status}
+      onClosed={() => { void fetchTicketDetail(); }}
       {currentUser}
     />
   {/if}
 
   <!-- Close Ticket Modal -->
   {#if showCloseModal && ticket}
-    <div
-      class="modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-close-title"
-      tabindex="-1"
-      onkeydown={(e) => { if (e.key === 'Escape') showCloseModal = false; }}
-    >
-      <div class="modal-card">
+    <dialog class="modal-card" use:modal aria-labelledby="modal-close-title"
+      oncancel={(event) => { if (isClosing) event.preventDefault(); else showCloseModal = false; }}>
         <h3 id="modal-close-title">Dokumentasi Solusi & Penutupan Tiket</h3>
         <p class="modal-sub">
           Tiket: <strong>{ticket.ticketNumber}</strong> — {ticket.title}
@@ -226,12 +261,11 @@
           <button type="button" class="btn btn-close-confirm" disabled={isClosing} onclick={handleCloseTicket}>
             {isClosing ? 'Memproses Penutupan…' : 'Tutup Tiket Sekarang'}
           </button>
-          <button type="button" class="btn btn-secondary" onclick={() => (showCloseModal = false)}>
+          <button type="button" class="btn btn-secondary" disabled={isClosing} onclick={() => (showCloseModal = false)}>
             Batal
           </button>
         </div>
-      </div>
-    </div>
+    </dialog>
   {/if}
 </div>
 
@@ -281,14 +315,7 @@
     font-weight: 600;
   }
 
-  .priority-low { background-color: rgba(100, 116, 139, 0.15); color: #64748b; }
-  .priority-medium { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
-  .priority-high { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
-  .priority-critical { background-color: rgba(220, 38, 38, 0.15); color: var(--color-danger); }
 
-  .status-open { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
-  .status-in-progress { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
-  .status-closed { background-color: rgba(22, 163, 74, 0.15); color: var(--color-success); }
 
   .ticket-detail-title {
     font-size: 1.4rem;
@@ -382,26 +409,15 @@
     background-color: var(--color-surface-hover);
   }
 
-  .btn-close-action {
-    background-color: var(--color-success);
-    color: #ffffff;
+  .btn-close-action, .btn-close-confirm {
+    background-color: var(--color-primary);
+    color: var(--color-primary-text);
   }
 
-  .btn-close-confirm {
-    background-color: var(--color-success);
-    color: #ffffff;
-  }
-
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-    padding: 20px;
-  }
+  dialog::backdrop { background: rgb(0 0 0 / 50%); }
+  dialog { margin: auto; color: var(--color-text); max-height: calc(100dvh - 32px); overflow: auto; }
+  .history-list { padding-left: 24px; }
+  .history-list li { margin-top: 16px; overflow-wrap: anywhere; }
 
   .modal-card {
     background-color: var(--color-surface);
@@ -409,7 +425,7 @@
     border-radius: var(--radius-md);
     padding: 24px;
     max-width: 500px;
-    width: 100%;
+    width: calc(100% - 32px);
   }
 
   .modal-sub {

@@ -6,7 +6,7 @@ Kebutuhan produk: [PRD.md](PRD.md). Rencana: [tasks/plan.md](tasks/plan.md).
 
 ## Environment development
 
-- Bun 1.4.2 terinstal global di host.
+- Bun 1.4.0 terverifikasi pada host.
 - PostgreSQL 16 menggunakan container existing `postgres`, port host `5432`.
 - Database: `it_service_desk`.
 - Role login sekaligus pemilik database development: `it_service_desk`.
@@ -47,11 +47,23 @@ API bind ke loopback (`127.0.0.1`), dengan port opsional melalui `PORT`.
 
 ```sh
 bun test          # Unit tests; tidak membutuhkan database
-bun run check     # TypeScript strict
+bun run check     # TypeScript dan Svelte diagnostics     # TypeScript strict
 bun run build     # Build backend ke dist/server
 bun run start     # Jalankan hasil build
 bun audit
 ```
+
+Integration test wajib memakai `TEST_DATABASE_URL` untuk database PostgreSQL terpisah
+yang namanya berakhiran `_test`. Runner menolak target kosong, nama lain, atau database
+yang sama dengan `DATABASE_URL`; setiap file test memakai schema sementara dan menghapusnya
+setelah selesai. Siapkan database test kosong, lalu jalankan:
+
+```sh
+bun run test:integration
+```
+
+Jangan arahkan test ke database development atau produksi. Upload test disimpan pada
+direktori sementara dan dibersihkan otomatis.
 
 Sumber API runtime: [Bun HTTP](https://bun.com/docs/runtime/http/server),
 [Bun SQL](https://bun.com/docs/runtime/sql#connection-pooling).

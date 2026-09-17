@@ -44,6 +44,8 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
 
   if (typeof password !== 'string' || password === '') {
     errors.password = 'Password wajib diisi.';
+  } else if (password.length > 1024) {
+    errors.password = 'Password maksimal 1024 karakter.';
   } else if (password.length < 12) {
     errors.password = 'Password minimal 12 karakter.';
   }
@@ -77,7 +79,10 @@ export function validateLoginInput(input: unknown): { valid: true; data: LoginIn
 
   if (typeof password !== 'string' || password === '') {
     errors.password = 'Password wajib diisi.';
+  } else if (password.length > 1024) {
+    errors.password = 'Password maksimal 1024 karakter.';
   }
+  if (typeof username === 'string' && username.length > 64) errors.username = 'Username terlalu panjang.';
 
   if (Object.keys(errors).length > 0) {
     return { valid: false, errors };
@@ -112,11 +117,11 @@ export function generateSessionId(): string {
 
 export function parseCookies(header: string | null): Record<string, string> {
   if (!header) return {};
-  const cookies: Record<string, string> = {};
+  const cookies: Record<string, string> = Object.create(null);
   for (const pair of header.split(';')) {
     const [name, ...rest] = pair.trim().split('=');
     if (name && rest.length > 0) {
-      cookies[name] = decodeURIComponent(rest.join('='));
+      try { cookies[name] = decodeURIComponent(rest.join('=')); } catch { /* Invalid cookies are not credentials. */ }
     }
   }
   return cookies;

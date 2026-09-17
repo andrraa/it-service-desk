@@ -27,7 +27,7 @@ import {
   safeDeleteFile,
   MAX_FILE_SIZE,
   MAX_FILES_PER_UPLOAD,
-  ALLOWED_MIME_TYPES,
+  validateAttachment,
   getUploadsDir,
 } from './attachments';
 import { MemoryRateLimiter } from './rate-limit';
@@ -67,11 +67,65 @@ export function json(body: unknown, status = 200, extraHeaders: Record<string, s
 export interface AppContext {
   sql: SQL;
   rateLimiter?: MemoryRateLimiter;
+  clientAddress?: string; // Set from the socket by the server, never a request header.
 }
 
 const defaultAuthRateLimiter = new MemoryRateLimiter(5, 60 * 1000);
 
-export async function handleRequest(request: Request, ctx: AppContext) {
+class RequestError extends Error {
+  constructor(public status: number, public code: string, message: string) { super(message); }
+}
+
+export const MAX_REQUEST_BODY_SIZE = MAX_FILE_SIZE * MAX_FILES_PER_UPLOAD + 1024 * 1024;
+
+export async function handleRequest(request: Request, ctx: AppContext): Promise<Response> {
+  try {
+    // Multipart has a larger server cap; all other bodies remain bounded, even when chunked.
+    const upload = request.method === 'POST' && /^\/api\/tickets\/[^/]+\/attachments$/.test(new URL(request.url).pathname)
+      && request.headers.get('content-type')?.startsWith('multipart/form-data;');
+    if (request.body && !upload) {
+      const reader = request.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.length;
+        if (size > 64 * 1024) {
+          await reader.cancel();
+          throw new RequestError(413, 'PAYLOAD_TOO_LARGE', 'Data permintaan terlalu besar.');
+        }
+        chunks.push(value);
+      }
+      request = new Request(request, { body: Buffer.concat(chunks) });
+    }
+    return await routeRequest(request, ctx);
+  } catch (error) {
+    if (error instanceof RequestError) return json({ error: { code: error.code, message: error.message } }, error.status);
+    console.error('Request failed:', error instanceof Error ? error.name : 'UnknownError');
+    return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem.' } }, 500);
+  }
+}
+
+function requestKey(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    throw new RequestError(422, 'VALIDATION_ERROR', 'ID permintaan tidak valid.');
+  }
+  return value;
+}
+
+async function lockActiveTicket(sql: SQL, id: string, user: User) {
+  const rows = await sql`SELECT id, creator_id AS "creatorId", status FROM tickets
+    WHERE id::text = ${id} OR ticket_number = ${id} FOR UPDATE`;
+  const ticket = rows[0];
+  if (!ticket) throw new RequestError(404, 'NOT_FOUND', 'Tiket tidak ditemukan.');
+  if (user.role === 'User' && String(ticket.creatorId) !== user.id) throw new RequestError(403, 'FORBIDDEN', 'Anda tidak memiliki hak akses ke tiket ini.');
+  if (ticket.status === 'Closed') throw new RequestError(403, 'FORBIDDEN', 'Tiket telah ditutup dan bersifat read-only.');
+  return ticket;
+}
+
+async function routeRequest(request: Request, ctx: AppContext) {
   const url = new URL(request.url);
   const pathname = url.pathname;
   const rateLimiter = ctx.rateLimiter ?? defaultAuthRateLimiter;
@@ -100,6 +154,9 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     if (request.method !== 'POST') {
       return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
     }
+
+    const rateCheck = rateLimiter.isAllowed(`register:${ctx.clientAddress ?? 'unknown'}`);
+    if (!rateCheck.allowed) return json({ error: { code: 'TOO_MANY_REQUESTS', message: 'Terlalu banyak percobaan pendaftaran.' } }, 429, { 'Retry-After': String(rateCheck.retryAfterSeconds) });
 
     let body: unknown;
     try {
@@ -154,7 +211,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
     }
 
-    const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
+    const ip = ctx.clientAddress ?? 'unknown';
     const rateCheck = rateLimiter.isAllowed(`login:${ip}`);
     if (!rateCheck.allowed) {
       return json({
@@ -294,7 +351,9 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     const cookies = parseCookies(request.headers.get('Cookie'));
     const sessionId = cookies.session_id;
     if (!sessionId) return null;
-    return await getSessionUser(ctx.sql, sessionId);
+    const user = await getSessionUser(ctx.sql, sessionId);
+    if (user?.mustChangePassword) throw new RequestError(403, 'PASSWORD_CHANGE_REQUIRED', 'Ganti password sebelum mengakses fitur ini.');
+    return user;
   };
 
   // Dashboard IT Summary: GET /api/dashboard/summary
@@ -346,6 +405,10 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       const unassignedOnly = url.searchParams.get('unassigned') === 'true';
       const assignedToMe = url.searchParams.get('assignedToMe') === 'true';
       const queryParam = url.searchParams.get('q')?.trim() || '';
+      const assignee = url.searchParams.get('assignee');
+      if (assignee && !/^\d+$/.test(assignee)) throw new RequestError(422, 'VALIDATION_ERROR', 'Penanggung jawab tidak valid.');
+      const page = Math.max(1, Math.min(100000, Number(url.searchParams.get('page')) || 1));
+      const limit = 20;
 
       const searchPattern = queryParam ? `%${queryParam}%` : null;
 
@@ -372,6 +435,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
           AND (${priorityFilter ? ctx.sql`t.priority = ${priorityFilter}` : ctx.sql`TRUE`})
           AND (${unassignedOnly ? ctx.sql`t.assignee_id IS NULL` : ctx.sql`TRUE`})
           AND (${assignedToMe ? ctx.sql`t.assignee_id = ${user.id}` : ctx.sql`TRUE`})
+          AND (${assignee ? ctx.sql`t.assignee_id = ${assignee}` : ctx.sql`TRUE`})
           AND (${searchPattern ? ctx.sql`(t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern})` : ctx.sql`TRUE`})
         ORDER BY 
           CASE t.priority 
@@ -383,11 +447,13 @@ export async function handleRequest(request: Request, ctx: AppContext) {
           END ASC,
           t.created_at ASC,
           t.id ASC
+        LIMIT ${limit + 1} OFFSET ${(Math.floor(page) - 1) * limit}
       `;
-
-      return json({ queue: rows });
+      const assignees = await ctx.sql`SELECT id, username FROM users WHERE role IN ('IT Staff', 'Super Admin') ORDER BY username`;
+      return json({ queue: rows.slice(0, limit), assignees, pagination: { page: Math.floor(page), hasMore: rows.length > limit } });
     } catch (err) {
-      console.error('Queue query error:', err);
+      if (err instanceof RequestError) throw err;
+      console.error('Queue query error:', err instanceof Error ? err.name : 'UnknownError');
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil antrean tiket.' } }, 500);
     }
   }
@@ -408,13 +474,14 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
 
     try {
-      const updated = await ctx.sql`
+      return await ctx.sql.begin(async (tx) => {
+      const updated = await tx`
         UPDATE tickets
         SET 
           assignee_id = ${user.id},
           status = 'In Progress',
           updated_at = NOW()
-        WHERE (id = ${ticketId} OR ticket_number = ${ticketId})
+        WHERE (id::text = ${ticketId} OR ticket_number = ${ticketId})
           AND status = 'Open'
           AND assignee_id IS NULL
         RETURNING 
@@ -441,7 +508,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
       const claimedTicket = updated[0] as Ticket;
 
-      await ctx.sql`
+      await tx`
         INSERT INTO audit_logs (ticket_id, actor_id, action, old_value, new_value, reason)
         VALUES (
           ${claimedTicket.id},
@@ -454,6 +521,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       `;
 
       return json({ message: 'Tiket berhasil diambil.', ticket: claimedTicket });
+      });
     } catch (err) {
       console.error('Claim ticket error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengambil tiket.' } }, 500);
@@ -490,8 +558,9 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     const { priority, reason } = validation.data;
 
     try {
-      const currentRows = await ctx.sql`
-        SELECT id, priority, status FROM tickets WHERE id = ${ticketId} OR ticket_number = ${ticketId} LIMIT 1
+      return await ctx.sql.begin(async (tx) => {
+      const currentRows = await tx`
+        SELECT id, priority, status FROM tickets WHERE id::text = ${ticketId} OR ticket_number = ${ticketId} LIMIT 1 FOR UPDATE
       `;
       if (currentRows.length === 0) {
         return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
@@ -504,14 +573,14 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
       const oldPriority = currentTicket.priority;
 
-      const updated = await ctx.sql`
+      const updated = await tx`
         UPDATE tickets
         SET priority = ${priority}, updated_at = NOW()
         WHERE id = ${currentTicket.id}
         RETURNING id, ticket_number AS "ticketNumber", creator_id AS "creatorId", assignee_id AS "assigneeId", title, description, priority, status, created_at AS "createdAt", updated_at AS "updatedAt"
       `;
 
-      await ctx.sql`
+      await tx`
         INSERT INTO audit_logs (ticket_id, actor_id, action, old_value, new_value, reason)
         VALUES (
           ${currentTicket.id},
@@ -524,6 +593,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       `;
 
       return json({ message: 'Prioritas tiket berhasil diperbarui.', ticket: updated[0] });
+      });
     } catch (err) {
       console.error('Update priority error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengubah prioritas.' } }, 500);
@@ -557,11 +627,12 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     const { solution } = validation.data;
 
     try {
-      const ticketRows = await ctx.sql`
+      return await ctx.sql.begin(async (tx) => {
+      const ticketRows = await tx`
         SELECT id, creator_id AS "creatorId", assignee_id AS "assigneeId", status
         FROM tickets
-        WHERE id = ${ticketId} OR ticket_number = ${ticketId}
-        LIMIT 1
+        WHERE id::text = ${ticketId} OR ticket_number = ${ticketId}
+        LIMIT 1 FOR UPDATE
       `;
       if (ticketRows.length === 0) {
         return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
@@ -582,7 +653,6 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       }
 
       // Atomic transaction: update ticket to Closed + insert resolution + insert audit log
-      const closeResult = await ctx.sql.begin(async (tx) => {
         const updatedTickets = await tx`
           UPDATE tickets
           SET status = 'Closed', updated_at = NOW()
@@ -612,13 +682,11 @@ export async function handleRequest(request: Request, ctx: AppContext) {
           )
         `;
 
-        return { ticket: updatedTickets[0], resolution: resRows[0] };
-      });
-
       return json({
         message: 'Tiket berhasil diselesaikan dan ditutup.',
-        ticket: closeResult.ticket,
-        resolution: closeResult.resolution,
+        ticket: updatedTickets[0],
+        resolution: resRows[0],
+      });
       });
     } catch (err: any) {
       if (err?.message === 'ALREADY_CLOSED') {
@@ -640,7 +708,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
     const ticketRows = await ctx.sql`
       SELECT id, creator_id AS "creatorId", status FROM tickets
-      WHERE id = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
+      WHERE id::text = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
       LIMIT 1
     `;
 
@@ -655,6 +723,10 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     }
 
     if (request.method === 'GET') {
+      const before = url.searchParams.get('before');
+      const after = url.searchParams.get('after');
+      if ((before && after) || (before && !/^\d+$/.test(before)) || (after && !/^\d+$/.test(after))) throw new RequestError(422, 'VALIDATION_ERROR', 'Cursor pesan tidak valid.');
+      const limit = 50;
       try {
         const rows = await ctx.sql`
           SELECT 
@@ -680,11 +752,14 @@ export async function handleRequest(request: Request, ctx: AppContext) {
           JOIN users u ON m.sender_id = u.id
           LEFT JOIN attachments a ON a.message_id = m.id
           WHERE m.ticket_id = ${ticket.id}
+            AND (${before ? ctx.sql`(m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = ${before} AND ticket_id = ${ticket.id})` : ctx.sql`TRUE`})
+            AND (${after ? ctx.sql`(m.created_at, m.id) > (SELECT created_at, id FROM messages WHERE id = ${after} AND ticket_id = ${ticket.id})` : ctx.sql`TRUE`})
           GROUP BY m.id, u.username, u.role
-          ORDER BY m.created_at ASC, m.id ASC
+          ORDER BY ${after ? ctx.sql`m.created_at ASC, m.id ASC` : ctx.sql`m.created_at DESC, m.id DESC`}
+          LIMIT ${limit + 1}
         `;
-
-        return json({ messages: rows });
+        const messages = after ? rows.slice(0, limit) : rows.slice(0, limit).reverse();
+        return json({ messages, pagination: { hasMore: rows.length > limit, before: messages[0]?.id ?? null }, ticketStatus: ticket.status });
       } catch (err) {
         console.error('Fetch messages error:', err);
         return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil pesan tiket.' } }, 500);
@@ -709,21 +784,27 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       }
 
       const { messageText } = validation.data;
+      const requestId = requestKey((body as Record<string, unknown>).requestId);
 
       try {
-        const inserted = await ctx.sql`
-          INSERT INTO messages (ticket_id, sender_id, message_text)
-          VALUES (${ticket.id}, ${user.id}, ${messageText})
+        const inserted = await ctx.sql.begin(async (tx) => {
+          await lockActiveTicket(tx, String(ticket.id), user);
+          return tx`
+          INSERT INTO messages (ticket_id, sender_id, message_text, request_id)
+          VALUES (${ticket.id}, ${user.id}, ${messageText}, ${requestId})
+          ON CONFLICT (sender_id, request_id) DO UPDATE SET request_id = EXCLUDED.request_id
           RETURNING id, ticket_id AS "ticketId", sender_id AS "senderId", message_text AS "messageText", created_at AS "createdAt"
         `;
 
+        });
         const newMsg = inserted[0] as TicketMessage;
         newMsg.senderUsername = user.username;
         newMsg.senderRole = user.role;
 
         return json({ message: 'Pesan berhasil dikirim.', data: newMsg }, 201);
       } catch (err) {
-        console.error('Send message error:', err);
+        if (err instanceof RequestError) throw err;
+        console.error('Send message error:', err instanceof Error ? err.name : 'UnknownError');
         return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengirim pesan.' } }, 500);
       }
     }
@@ -733,7 +814,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
   // Upload Attachment: POST /api/tickets/:id/attachments
   const uploadMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/attachments$/);
-  if (uploadMatch) {
+  if (uploadMatch && request.method !== 'GET') {
     const ticketIdOrNumber = uploadMatch[1];
     const user = await getAuthUser();
     if (!user) {
@@ -745,7 +826,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
     const ticketRows = await ctx.sql`
       SELECT id, creator_id AS "creatorId", status FROM tickets
-      WHERE id = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
+      WHERE id::text = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
       LIMIT 1
     `;
     if (ticketRows.length === 0) {
@@ -778,55 +859,66 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       return json({ error: { code: 'VALIDATION_ERROR', message: `Maksimal ${MAX_FILES_PER_UPLOAD} berkas per pengiriman.` } }, 422);
     }
 
-    const messageId = formData.get('messageId')?.toString() || null;
+    let messageId = formData.get('messageId')?.toString() || null;
+    if (messageId && !/^\d+$/.test(messageId)) throw new RequestError(422, 'VALIDATION_ERROR', 'ID pesan tidak valid.');
+    const uploadId = requestKey(formData.get('uploadId'));
     const uploadsDir = await ensureUploadsDirExists();
-    const savedFiles: { originalName: string; storageName: string; mimeType: string; size: number; fullPath: string }[] = [];
+    const savedPaths: string[] = [];
 
     try {
-      for (const file of files) {
-        if (file.size > MAX_FILE_SIZE) {
-          throw new Error(`Ukuran berkas '${file.name}' melebihi batas maksimal 10 MB.`);
+      const insertedRows = await ctx.sql.begin(async (tx) => {
+        // ponytail: file writes hold a per-ticket lock; stage outside the lock if upload contention becomes material.
+        await lockActiveTicket(tx, String(ticket.id), user);
+        if (uploadId) {
+          const previous = await tx`SELECT id, ticket_id AS "ticketId", message_id AS "messageId", original_name AS "originalName", mime_type AS "mimeType", file_size AS "fileSize"
+            FROM attachments WHERE upload_id = ${uploadId} AND uploader_id = ${user.id} ORDER BY upload_index`;
+          if (previous.length) {
+            if (String(previous[0].ticketId) !== String(ticket.id)) throw new RequestError(409, 'CONFLICT', 'ID upload sudah dipakai.');
+            return previous;
+          }
         }
-
-        const arrayBuffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        const detectedMime = detectMimeFromBytes(bytes);
-
-        if (!detectedMime || !ALLOWED_MIME_TYPES.includes(detectedMime)) {
-          throw new Error(`Tipe berkas '${file.name}' tidak didukung atau signature berkas tidak valid. Format yang diizinkan: JPG, PNG, WebP, PDF.`);
+        if (messageId) {
+          const messages = await tx`SELECT id FROM messages WHERE id = ${messageId} AND ticket_id = ${ticket.id} AND sender_id = ${user.id}`;
+          if (!messages.length) throw new RequestError(403, 'FORBIDDEN', 'Lampiran hanya dapat ditambahkan ke pesan Anda pada tiket ini.');
+          const counts = await tx`SELECT COUNT(*)::int AS count FROM attachments WHERE message_id = ${messageId}`;
+          if (counts[0].count + files.length > MAX_FILES_PER_UPLOAD) throw new RequestError(422, 'VALIDATION_ERROR', 'Maksimal lima berkas per pesan.');
+        } else if (formData.has('messageText')) {
+          const validation = validateMessageInput({ messageText: formData.get('messageText') }, true);
+          if (!validation.valid) throw new RequestError(422, 'VALIDATION_ERROR', 'Pesan tidak valid.');
+          const messages = await tx`INSERT INTO messages (ticket_id, sender_id, message_text)
+            VALUES (${ticket.id}, ${user.id}, ${validation.data.messageText}) RETURNING id`;
+          messageId = String(messages[0].id);
         }
-
-        const storageName = generateStorageFilename(file.name);
-        const fullPath = join(uploadsDir, storageName);
-
-        await Bun.write(fullPath, bytes);
-        savedFiles.push({
-          originalName: file.name,
-          storageName,
-          mimeType: detectedMime,
-          size: file.size,
-          fullPath,
-        });
-      }
-
-      // Persist in DB
-      const insertedRows = [];
-      for (const sf of savedFiles) {
-        const inserted = await ctx.sql`
-          INSERT INTO attachments (ticket_id, message_id, uploader_id, original_name, storage_path, mime_type, file_size)
-          VALUES (${ticket.id}, ${messageId}, ${user.id}, ${sf.originalName}, ${sf.storageName}, ${sf.mimeType}, ${sf.size})
-          RETURNING id, ticket_id AS "ticketId", message_id AS "messageId", uploader_id AS "uploaderId", original_name AS "originalName", mime_type AS "mimeType", file_size AS "fileSize", created_at AS "createdAt"
-        `;
-        insertedRows.push(inserted[0]);
-      }
-
+        const rows = [];
+        for (const [index, file] of files.entries()) {
+          if (!(file instanceof File)) throw new RequestError(422, 'VALIDATION_ERROR', 'Field files harus berupa berkas.');
+          const validation = validateAttachment(file);
+          if (validation) throw new RequestError(422, 'VALIDATION_ERROR', validation);
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const mime = detectMimeFromBytes(bytes);
+          if (!mime || validateAttachment(file, mime)) throw new RequestError(422, 'VALIDATION_ERROR', 'Ekstensi, tipe, atau signature berkas tidak valid. Gunakan JPG, PNG, WebP, atau PDF yang sesuai.');
+          const storageName = generateStorageFilename(file.name);
+          const fullPath = join(uploadsDir, storageName);
+          savedPaths.push(fullPath); // Also clean up partially written files.
+          await Bun.write(fullPath, bytes);
+          const inserted = await tx`
+            INSERT INTO attachments (ticket_id, message_id, uploader_id, original_name, storage_path, mime_type, file_size, upload_id, upload_index)
+            VALUES (${ticket.id}, ${messageId}, ${user.id}, ${file.name}, ${storageName}, ${mime}, ${file.size}, ${uploadId}, ${index})
+            RETURNING id, ticket_id AS "ticketId", message_id AS "messageId", uploader_id AS "uploaderId", original_name AS "originalName", mime_type AS "mimeType", file_size AS "fileSize", created_at AS "createdAt"`;
+          rows.push(inserted[0]);
+        }
+        return rows;
+      });
       return json({ message: 'Berkas berhasil diunggah.', attachments: insertedRows }, 201);
-    } catch (err: any) {
-      // Clean up staged files on disk in case of error
-      for (const sf of savedFiles) {
-        await safeDeleteFile(sf.fullPath);
+    } catch (err) {
+      for (const path of savedPaths) {
+        try {
+          // A disconnected COMMIT can be ambiguous: never delete a possibly committed file.
+          const persisted = await ctx.sql`SELECT 1 FROM attachments WHERE storage_path = ${path.split(/[\\/]/).pop()!}`;
+          if (!persisted.length) await safeDeleteFile(path);
+        } catch { console.error('Upload cleanup deferred: database unavailable.'); }
       }
-      return json({ error: { code: 'VALIDATION_ERROR', message: err.message || 'Gagal menyimpan berkas.' } }, 422);
+      throw err; // Boundary hides database/storage errors and preserves validation status.
     }
   }
 
@@ -897,7 +989,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
     try {
       const ticketRows = await ctx.sql`
-        SELECT id, creator_id AS "creatorId" FROM tickets WHERE id = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber} LIMIT 1
+        SELECT id, creator_id AS "creatorId" FROM tickets WHERE id::text = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber} LIMIT 1
       `;
       if (ticketRows.length === 0) return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
       const ticket = ticketRows[0] as { id: number | string; creatorId: number | string };
@@ -945,6 +1037,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
       }
 
       const { title, description, priority } = validation.data;
+      const requestId = requestKey((body as Record<string, unknown>).requestId);
 
       try {
         const seqResult = await ctx.sql`SELECT nextval('ticket_number_seq') AS seq`;
@@ -952,8 +1045,9 @@ export async function handleRequest(request: Request, ctx: AppContext) {
         const ticketNumber = formatTicketNumber(seq);
 
         const inserted = await ctx.sql`
-          INSERT INTO tickets (ticket_number, creator_id, title, description, priority, status)
-          VALUES (${ticketNumber}, ${user.id}, ${title}, ${description}, ${priority}, 'Open')
+          INSERT INTO tickets (ticket_number, creator_id, title, description, priority, status, request_id)
+          VALUES (${ticketNumber}, ${user.id}, ${title}, ${description}, ${priority}, 'Open', ${requestId})
+          ON CONFLICT (creator_id, request_id) DO UPDATE SET request_id = EXCLUDED.request_id
           RETURNING 
             id, 
             ticket_number AS "ticketNumber", 
@@ -986,127 +1080,21 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
         const searchPattern = queryParam ? `%${queryParam}%` : null;
 
-        let ticketsQuery;
-        let countQuery;
-
-        if (user.role === 'User') {
-          if (searchPattern) {
-            ticketsQuery = await ctx.sql`
-              SELECT 
-                t.id, 
-                t.ticket_number AS "ticketNumber", 
-                t.creator_id AS "creatorId", 
-                u.username AS "creatorUsername",
-                u.nik AS "creatorNik",
-                t.assignee_id AS "assigneeId",
-                a.username AS "assigneeUsername",
-                t.title, 
-                t.description, 
-                t.priority, 
-                t.status, 
-                t.created_at AS "createdAt", 
-                t.updated_at AS "updatedAt"
-              FROM tickets t
-              JOIN users u ON t.creator_id = u.id
-              LEFT JOIN users a ON t.assignee_id = a.id
-              WHERE t.creator_id = ${user.id}
-                AND (t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})
-              ORDER BY t.created_at DESC
-              LIMIT ${limit} OFFSET ${offset}
-            `;
-            countQuery = await ctx.sql`
-              SELECT COUNT(*)::int AS count
-              FROM tickets t
-              WHERE t.creator_id = ${user.id}
-                AND (t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})
-            `;
-          } else {
-            ticketsQuery = await ctx.sql`
-              SELECT 
-                t.id, 
-                t.ticket_number AS "ticketNumber", 
-                t.creator_id AS "creatorId", 
-                u.username AS "creatorUsername",
-                u.nik AS "creatorNik",
-                t.assignee_id AS "assigneeId",
-                a.username AS "assigneeUsername",
-                t.title, 
-                t.description, 
-                t.priority, 
-                t.status, 
-                t.created_at AS "createdAt", 
-                t.updated_at AS "updatedAt"
-              FROM tickets t
-              JOIN users u ON t.creator_id = u.id
-              LEFT JOIN users a ON t.assignee_id = a.id
-              WHERE t.creator_id = ${user.id}
-              ORDER BY t.created_at DESC
-              LIMIT ${limit} OFFSET ${offset}
-            `;
-            countQuery = await ctx.sql`
-              SELECT COUNT(*)::int AS count
-              FROM tickets t
-              WHERE t.creator_id = ${user.id}
-            `;
-          }
-        } else {
-          if (searchPattern) {
-            ticketsQuery = await ctx.sql`
-              SELECT 
-                t.id, 
-                t.ticket_number AS "ticketNumber", 
-                t.creator_id AS "creatorId", 
-                u.username AS "creatorUsername",
-                u.nik AS "creatorNik",
-                t.assignee_id AS "assigneeId",
-                a.username AS "assigneeUsername",
-                t.title, 
-                t.description, 
-                t.priority, 
-                t.status, 
-                t.created_at AS "createdAt", 
-                t.updated_at AS "updatedAt"
-              FROM tickets t
-              JOIN users u ON t.creator_id = u.id
-              LEFT JOIN users a ON t.assignee_id = a.id
-              WHERE (t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})
-              ORDER BY t.created_at DESC
-              LIMIT ${limit} OFFSET ${offset}
-            `;
-            countQuery = await ctx.sql`
-              SELECT COUNT(*)::int AS count
-              FROM tickets t
-              WHERE (t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})
-            `;
-          } else {
-            ticketsQuery = await ctx.sql`
-              SELECT 
-                t.id, 
-                t.ticket_number AS "ticketNumber", 
-                t.creator_id AS "creatorId", 
-                u.username AS "creatorUsername",
-                u.nik AS "creatorNik",
-                t.assignee_id AS "assigneeId",
-                a.username AS "assigneeUsername",
-                t.title, 
-                t.description, 
-                t.priority, 
-                t.status, 
-                t.created_at AS "createdAt", 
-                t.updated_at AS "updatedAt"
-              FROM tickets t
-              JOIN users u ON t.creator_id = u.id
-              LEFT JOIN users a ON t.assignee_id = a.id
-              ORDER BY t.created_at DESC
-              LIMIT ${limit} OFFSET ${offset}
-            `;
-            countQuery = await ctx.sql`
-              SELECT COUNT(*)::int AS count
-              FROM tickets t
-            `;
-          }
-        }
-
+        const status = url.searchParams.get('status');
+        if (status && !['Open', 'In Progress', 'Closed'].includes(status)) throw new RequestError(422, 'VALIDATION_ERROR', 'Status tidak valid.');
+        const scope = user.role === 'User' || url.searchParams.get('mine') === 'true'
+          ? ctx.sql`t.creator_id = ${user.id}` : ctx.sql`TRUE`;
+        const filter = ctx.sql`${scope}
+          AND (${status ? ctx.sql`t.status = ${status}` : ctx.sql`TRUE`})
+          AND (${searchPattern ? ctx.sql`(t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})` : ctx.sql`TRUE`})`;
+        const ticketsQuery = await ctx.sql`
+          SELECT t.id, t.ticket_number AS "ticketNumber", t.creator_id AS "creatorId",
+            u.username AS "creatorUsername", u.nik AS "creatorNik", t.assignee_id AS "assigneeId",
+            a.username AS "assigneeUsername", t.title, t.description, t.priority, t.status,
+            t.created_at AS "createdAt", t.updated_at AS "updatedAt"
+          FROM tickets t JOIN users u ON t.creator_id = u.id LEFT JOIN users a ON t.assignee_id = a.id
+          WHERE ${filter} ORDER BY t.created_at DESC, t.id DESC LIMIT ${limit} OFFSET ${offset}`;
+        const countQuery = await ctx.sql`SELECT COUNT(*)::int AS count FROM tickets t WHERE ${filter}`;
         const total = (countQuery[0] as { count: number }).count;
 
         return json({
@@ -1119,12 +1107,31 @@ export async function handleRequest(request: Request, ctx: AppContext) {
           },
         });
       } catch (err) {
-        console.error('List tickets error:', err);
+        if (err instanceof RequestError) throw err;
+        console.error('List tickets error:', err instanceof Error ? err.name : 'UnknownError');
         return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem saat mengambil daftar tiket.' } }, 500);
       }
     }
 
     return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET, POST' });
+  }
+
+  const historyMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/history$/);
+  if (historyMatch) {
+    const user = await getAuthUser();
+    if (!user) throw new RequestError(401, 'UNAUTHORIZED', 'Silakan masuk terlebih dahulu.');
+    if (request.method !== 'GET') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET' });
+    const rows = await ctx.sql`SELECT id, creator_id AS "creatorId" FROM tickets WHERE id::text = ${historyMatch[1]} OR ticket_number = ${historyMatch[1]}`;
+    const ticket = rows[0];
+    if (!ticket) throw new RequestError(404, 'NOT_FOUND', 'Tiket tidak ditemukan.');
+    if (user.role === 'User' && String(ticket.creatorId) !== user.id) throw new RequestError(403, 'FORBIDDEN', 'Anda tidak memiliki hak akses ke tiket ini.');
+    const before = url.searchParams.get('before');
+    if (before && !/^\d+$/.test(before)) throw new RequestError(422, 'VALIDATION_ERROR', 'Cursor histori tidak valid.');
+    const history = await ctx.sql`SELECT a.id, a.action, a.old_value AS "oldValue", a.new_value AS "newValue", a.reason,
+      a.created_at AS "createdAt", u.username AS "actorUsername"
+      FROM audit_logs a JOIN users u ON u.id = a.actor_id WHERE a.ticket_id = ${ticket.id}
+      AND (${before ? ctx.sql`a.id < ${before}` : ctx.sql`TRUE`}) ORDER BY a.id DESC LIMIT 51`;
+    return json({ history: history.slice(0, 50), hasMore: history.length > 50 });
   }
 
   // Single Ticket Detail: /api/tickets/:id
@@ -1168,7 +1175,7 @@ export async function handleRequest(request: Request, ctx: AppContext) {
         LEFT JOIN users a ON t.assignee_id = a.id
         LEFT JOIN resolutions r ON r.ticket_id = t.id
         LEFT JOIN users ru ON r.resolver_id = ru.id
-        WHERE t.id = ${ticketIdOrNumber} OR t.ticket_number = ${ticketIdOrNumber}
+        WHERE t.id::text = ${ticketIdOrNumber} OR t.ticket_number = ${ticketIdOrNumber}
         LIMIT 1
       `;
 

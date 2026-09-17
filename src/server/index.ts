@@ -1,5 +1,5 @@
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from './app';
+import { handleRequest, readConfig, MAX_REQUEST_BODY_SIZE } from './app';
 
 const config = readConfig(process.env);
 // https://bun.com/docs/runtime/sql#connection-pooling
@@ -9,8 +9,8 @@ const db = new SQL(config.databaseUrl, { max: 5, connectionTimeout: 2, idleTimeo
 const server = Bun.serve({
   hostname: '127.0.0.1',
   port: config.port,
-  maxRequestBodySize: 64 * 1024,
-  fetch: (request) => handleRequest(request, { sql: db }),
+  maxRequestBodySize: MAX_REQUEST_BODY_SIZE,
+  fetch: (request, server) => handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }),
 });
 console.info(`IT Service Desk API: ${server.url}`);
 

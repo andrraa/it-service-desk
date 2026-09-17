@@ -1,10 +1,14 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest } from '../src/server/app';
+import { handleRequest as route, type AppContext } from '../src/server/app';
+import { MemoryRateLimiter } from '../src/server/rate-limit';
 import { openTestDatabase, closeTestDatabase } from './database';
 
 describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
+  // These cases test database uniqueness; limiter boundaries have separate regression coverage.
+  const rateLimiter = new MemoryRateLimiter(100, 60000);
+  const handleRequest = (request: Request, context: AppContext) => route(request, { ...context, rateLimiter });
 
   beforeAll(async () => {
     sql = await openTestDatabase();

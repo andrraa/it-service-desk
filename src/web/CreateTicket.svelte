@@ -16,6 +16,10 @@
   let errors = $state<Record<string, string>>({});
   let generalError = $state('');
   let isSubmitting = $state(false);
+  let createdTicket = $state<Ticket | null>(null);
+  let deliveryUncertain = $state(false);
+  const requestId = crypto.randomUUID();
+  const uploadId = crypto.randomUUID();
 
   function handleFileSelection(e: Event) {
     const target = e.target as HTMLInputElement;
@@ -63,20 +67,23 @@
     if (Object.keys(errors).length > 0) return;
 
     isSubmitting = true;
+    deliveryUncertain = true;
     try {
-      // 1. Create ticket
+      // Retry failed uploads on the same ticket; request keys also cover a lost create response.
+      if (!createdTicket) {
       const res = await fetch('/api/tickets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Requested-With': 'fetch',
         },
-        body: JSON.stringify({ title, description, priority }),
+        body: JSON.stringify({ title, description, priority, requestId }),
       });
 
       const data: any = await res.json();
 
       if (!res.ok) {
+        if (res.status < 500) deliveryUncertain = false;
         if (data.error?.details) {
           errors = data.error.details;
         } else {
@@ -85,11 +92,14 @@
         return;
       }
 
-      const createdTicket: Ticket = data.ticket;
+      createdTicket = data.ticket;
+      }
+      if (!createdTicket) return;
 
       // 2. Upload attachments if any
       if (selectedFiles.length > 0) {
         const formData = new FormData();
+        formData.append('uploadId', uploadId);
         for (const file of selectedFiles) {
           formData.append('files', file);
         }
@@ -103,14 +113,18 @@
         });
 
         if (!uploadRes.ok) {
+          if (uploadRes.status < 500) deliveryUncertain = false;
           const uploadData: any = await uploadRes.json();
-          alert(`Tiket dibuat (${createdTicket.ticketNumber}), tetapi lampiran gagal disimpan: ${uploadData.error?.message || 'Terjadi kesalahan'}`);
+          generalError = `Tiket ${createdTicket.ticketNumber} sudah dibuat. Lampiran belum tersimpan: ${uploadData.error?.message || 'Terjadi kesalahan'}. Coba kirim lagi untuk melanjutkan upload, bukan membuat tiket baru.`;
+          return;
         }
       }
 
       onCreated?.(createdTicket);
     } catch {
-      generalError = 'Terjadi kesalahan jaringan saat menghubungi server.';
+      generalError = createdTicket
+        ? `Tiket ${createdTicket.ticketNumber} sudah dibuat. Upload belum terkonfirmasi; pilihan berkas tetap tersedia. Coba kirim lagi.`
+        : 'Kiriman belum terkonfirmasi. Coba kirim lagi; ID permintaan yang sama mencegah tiket duplikat.';
     } finally {
       isSubmitting = false;
     }
@@ -144,7 +158,7 @@
         bind:value={title}
         placeholder="Ringkasan singkat kendala yang Anda alami"
         required
-        disabled={isSubmitting}
+        disabled={isSubmitting || deliveryUncertain || Boolean(createdTicket)}
         class:input-error={Boolean(errors.title)}
       />
       {#if errors.title}
@@ -154,7 +168,7 @@
 
     <div class="form-group">
       <label for="ticket-priority">Tingkat Prioritas</label>
-      <select id="ticket-priority" bind:value={priority} disabled={isSubmitting}>
+      <select id="ticket-priority" bind:value={priority} disabled={isSubmitting || deliveryUncertain || Boolean(createdTicket)}>
         <option value="Low">Low — Gangguan ringan / tidak mendesak</option>
         <option value="Medium">Medium — Kendala mengganggu, ada alternatif</option>
         <option value="High">High — Pekerjaan utama terhambat</option>
@@ -171,7 +185,7 @@
         bind:value={description}
         placeholder="Jelaskan kronologi, langkah yang sudah dicoba, dan pesan error jika ada…"
         required
-        disabled={isSubmitting}
+        disabled={isSubmitting || deliveryUncertain || Boolean(createdTicket)}
         class:input-error={Boolean(errors.description)}
       ></textarea>
       {#if errors.description}
@@ -188,7 +202,7 @@
         multiple
         accept=".jpg,.jpeg,.png,.webp,.pdf"
         onchange={handleFileSelection}
-        disabled={isSubmitting || selectedFiles.length >= 5}
+        disabled={isSubmitting || deliveryUncertain || selectedFiles.length >= 5}
       />
       <span class="field-hint">Format: JPG, PNG, WebP, PDF (Maksimal 10 MB per berkas, maks 5 berkas).</span>
 
@@ -202,7 +216,7 @@
             <div class="file-chip">
               <span class="file-chip-name">{file.name}</span>
               <span class="file-chip-size">({(file.size / 1024).toFixed(0)} KB)</span>
-              <button type="button" class="btn-remove-chip" onclick={() => removeFile(idx)}>&times;</button>
+              <button type="button" class="btn-remove-chip" aria-label={`Hapus lampiran ${file.name}`} disabled={isSubmitting || deliveryUncertain} onclick={() => removeFile(idx)}>&times;</button>
             </div>
           {/each}
         </div>
@@ -211,7 +225,7 @@
 
     <div class="form-actions">
       <button type="submit" class="btn btn-primary" disabled={isSubmitting}>
-        {isSubmitting ? 'Menyimpan Tiket…' : 'Kirim Laporan Tiket'}
+        {isSubmitting ? 'Menyimpan…' : createdTicket ? 'Coba Upload Lagi' : 'Kirim Laporan Tiket'}
       </button>
       <button type="button" class="btn btn-secondary" onclick={onCancel} disabled={isSubmitting}>
         Batal

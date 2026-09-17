@@ -253,6 +253,7 @@
         />
       {:else if currentView === 'tickets'}
         <TicketList
+          canViewAll={Boolean(currentUser && currentUser.role !== 'User')}
           onCreateNewTicket={() => (currentView = 'create-ticket')}
           onSelectTicket={(t) => {
             selectedTicket = t;
