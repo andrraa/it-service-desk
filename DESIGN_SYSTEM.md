@@ -1,8 +1,10 @@
 # Design System — IT Service Desk
 
-**Versi:** 1.0  
-**Status:** Spesifikasi target UI; bukan laporan implementasi selesai.  
-**Arah:** Clean Corporate · Light & Dark · Desktop & Mobile  
+**Versi:** 1.1
+
+**Status:** Spesifikasi target UI berdasarkan audit browser; bukan laporan implementasi selesai.
+
+**Arah:** Clean Corporate · Light & Dark · Desktop & Mobile
 **Handoff:** PRD disusun menggunakan ASTRA; dokumen ini menjadi panduan implementasi untuk Gemini-3.8 sesuai konteks pengguna. Keduanya bukan fitur atau dependensi aplikasi.
 
 ## 1. Landasan dan batas perubahan
@@ -17,7 +19,27 @@ README dan pembuka dokumen rencana masih menyebut fondasi, sedangkan source dan 
 
 **Prioritas keputusan:** permintaan terbaru pengguna mengatur visual; PRD mengatur perilaku bisnis. Rentang radius terbaru **4–12 px** menggantikan ketentuan visual lama 8–12 px untuk implementasi berikutnya. Ketentuan bisnis berlabel **Usulan** di PRD tetap usulan; dokumen desain ini tidak otomatis menyetujuinya.
 
-Lingkup dokumen ini adalah tampilan dan interaksi. Pengurangan elemen berarti mengurangi gangguan visual, bukan menghapus histori, validasi, otorisasi, atau fungsi MVP. Tidak ada perubahan source UI dalam penyusunan dokumen ini.
+Lingkup dokumen ini adalah tampilan dan interaksi. Pengurangan elemen berarti mengurangi gangguan visual, bukan menghapus histori, validasi, otorisasi, atau fungsi MVP. Audit versi 1.1 hanya memperbarui dokumen ini; source UI tidak diubah.
+
+### 1.1 Temuan audit browser — akun User
+
+Audit dilakukan setelah login sebagai akun User pada Light/Dark dan viewport desktop/mobile. Kondisi aktual belum mengikuti spesifikasi target:
+
+| Temuan aktual | Dampak | Keputusan target |
+|---|---|---|
+| Login membuka `Ringkasan workspace` | Menambah satu langkah sebelum pekerjaan utama | User langsung ke **Tiket Saya**; IT/Admin langsung ke **Antrean IT** |
+| Status koneksi API/PostgreSQL tampil pada halaman pengguna | Informasi teknis tidak membantu pengguna dan menambah kecemasan | Hapus dari UI produk; health endpoint hanya untuk monitoring operasional |
+| Welcome banner, alur Open/In Progress/Closed, label tahap/rencana fitur | Mengulang informasi dan membuat halaman terasa seperti demo | Hapus seluruh halaman overview, bukan sekadar sembunyikan panel tertentu |
+| Sidebar memuat Ringkasan dan Buat Tiket, sementara halaman daftar punya CTA yang sama | Navigasi ganda dan membingungkan | Sidebar hanya tujuan utama; Buat Tiket hanya CTA di Tiket Saya |
+| NIK selalu terlihat di sidebar | Menambah paparan identitas tanpa fungsi kerja | Tampilkan hanya di profil/admin ketika memang dibutuhkan |
+| Breadcrumb `Workspace / ...`, “INTERNAL WORKSPACE”, dan footer versi | Copy internal/development memenuhi layar | Hapus; gunakan judul halaman dan brand singkat |
+| Empty state masih menampilkan search/filter dan dua CTA Buat Tiket | Kontrol tidak berguna saat belum ada data | Pada daftar kosong, tampilkan satu CTA; search/filter muncul setelah ada tiket |
+| Form memakai eyebrow “FORMULIR PENGADUAN”, badge “Status awal: Open”, dan card besar | Informasi otomatis diperlakukan seperti keputusan pengguna | Hapus ketiganya; cukup judul, petunjuk singkat, field, dan aksi |
+| Desktop membatasi konten terlalu sempit dan menyisakan ruang kosong besar | Antrean/tabel sulit dipindai dan layar tidak dimanfaatkan | Daftar/antrean memakai lebar tersedia hingga 1280 px; form tetap maksimal 720 px |
+| Mobile menumpuk seluruh sidebar di atas konten | Aksi utama berada jauh di bawah dan halaman tampak rusak | Sidebar menjadi drawer; topbar mobile hanya menu, judul singkat, dan tema |
+| Banyak panel bersarang dan border | Hierarki visual berat meski data sedikit | Gunakan spacing/separator; maksimal satu surface utama per area kerja |
+
+Temuan ini bersifat normatif: implementasi berikutnya wajib menghapus elemen di atas, bukan mempertahankannya karena sudah ada di source.
 
 ## 2. Prinsip desain
 
@@ -159,7 +181,9 @@ Sidebar hanya untuk pengguna terautentikasi. Area akun menampilkan username; rol
 4. Konten utama: daftar, form, atau detail.
 5. Pagination jika ada halaman lain; tidak ada footer branding berulang.
 
-Breadcrumb hanya pada hierarki nyata, misalnya `Tiket Saya / TKT-000001`. Jangan tampilkan `Workspace /` pada semua halaman tanpa fungsi navigasi.
+Tidak ada halaman `Ringkasan`, `Overview`, atau `Home` setelah login pada MVP. Logo mengarah ke halaman awal role, bukan ke landing page terpisah.
+
+Breadcrumb hanya pada hierarki nyata dan clickable, misalnya `Tiket Saya / TKT-000001`. Pada halaman tingkat pertama, breadcrumb tidak ditampilkan. Jangan tampilkan `Workspace /` sebagai dekorasi.
 
 ## 6. Komponen dan aturan interaksi
 
@@ -226,8 +250,8 @@ Breadcrumb hanya pada hierarki nyata, misalnya `Tiket Saya / TKT-000001`. Jangan
 | Halaman | Wajib ditampilkan | Tidak perlu |
 |---|---|---|
 | Masuk / Daftar | Brand sederhana, form, error, tautan pindah form, tema; petunjuk lupa password ketika tersedia | Sidebar, hero ilustrasi, status database, statistik |
-| Tiket Saya | Pencarian, filter status/prioritas, daftar, CTA Buat Tiket, pagination | Welcome banner, ringkasan angka pribadi yang menduplikasi daftar |
-| Buat Tiket | Judul, deskripsi, prioritas dengan panduan, lampiran opsional, kirim/batal | Nomor/status editable, wizard multi-step untuk empat field |
+| Tiket Saya | Jika ada data: pencarian, filter status/prioritas, daftar, CTA Buat Tiket, pagination. Jika kosong: judul, empty state singkat, satu CTA | Welcome banner, filter kosong, dua CTA identik, ringkasan angka pribadi yang menduplikasi daftar |
+| Buat Tiket | H1 “Buat Tiket”, satu kalimat petunjuk, judul, deskripsi, prioritas dengan panduan, lampiran opsional, kirim/batal | Eyebrow “Formulir Pengaduan”, badge status awal, card pembungkus besar, nomor/status editable, wizard multi-step |
 | Antrean IT | Empat ringkasan PRD, pencarian nomor/judul, filter status/prioritas/penanggung jawab, belum diambil/ditangani sendiri, antrean | Grafik tren, leaderboard, SLA countdown, aktivitas palsu |
 | Detail Tiket | Nomor/judul, prioritas/status, deskripsi, pelapor, waktu/usia, penanggung jawab, lampiran, percakapan, aksi berizin | Pengulangan judul di banyak panel, seluruh metadata dalam card masing-masing |
 | Detail Closed | Solusi, penutup dan waktu penutupan, laporan awal, percakapan/lampiran read-only | Composer disabled besar, tombol reopen/hapus |
@@ -249,8 +273,9 @@ Breakpoint mengikuti lebar viewport, bukan deteksi perangkat.
 | `768–1023 px` | Padding 24 px, drawer tetap dipakai, form satu kolom, tabel hanya jika muat |
 | `≥ 1024 px` | Sidebar 240 px, padding 32 px, tabel antrean, detail dua kolom |
 
-- Drawer memiliki tombol buka/tutup berlabel, focus management, Escape, dan mengembalikan fokus ke pemicu; gunakan pola dialog yang sama.
-- Mobile header cukup judul singkat, menu, tema; jangan memindahkan seluruh sidebar ke atas konten seperti shell existing.
+- Drawer memiliki tombol buka/tutup berlabel, focus management, Escape, backdrop, scroll lock, dan mengembalikan fokus ke pemicu; gunakan pola dialog yang sama.
+- Mobile header cukup menu, judul singkat, dan tema. Sidebar **tidak boleh mengambil ruang layout saat tertutup** dan tidak boleh ditumpuk di atas konten seperti implementasi aktual.
+- Pada 320–390 px, konten utama harus terlihat pada viewport pertama tanpa harus melewati brand, seluruh menu, profil, dan tombol keluar.
 - Ringkasan dashboard: 4 kolom desktop, 2 × 2 mobile.
 - Pencarian tetap terlihat; filter tambahan dapat dibuka lewat “Filter (n)”. Filter aktif dan reset tetap jelas.
 - Item mobile: nomor/judul → prioritas/status → pelapor untuk IT, penanggung jawab, waktu/usia → aksi. Jangan menghilangkan usia antrean atau status.
@@ -286,7 +311,7 @@ Persyaratan aksesibilitas:
 
 ## 10. Elemen existing yang harus dibuang atau disederhanakan
 
-Daftar berikut adalah instruksi perubahan UI berikutnya, **bukan klaim sudah dihapus dari source**.
+Daftar berikut adalah hasil audit browser dan instruksi wajib perubahan UI berikutnya, **bukan klaim sudah dihapus dari source**.
 
 | Lokasi existing | Keputusan target | Alasan / pengganti |
 |---|---|---|
@@ -304,6 +329,10 @@ Daftar berikut adalah instruksi perubahan UI berikutnya, **bukan klaim sudah dih
 | Hard-coded badge colors di daftar/dashboard/detail | Ganti token semantik bersama | Kontras konsisten Light dan Dark |
 | Radius 3 px / elemen bulat dekoratif percakapan | Normalisasi 4 px atau hapus dekorasi | Sesuai bahasa visual terbaru |
 | Panel di dalam panel dan border setiap metadata | Ganti spacing, heading, separator | Hierarki tanpa terlalu banyak kotak |
+| Search/filter saat daftar benar-benar kosong | Sembunyikan sampai data tersedia | Kontrol tanpa data tidak memiliki hasil untuk dipersempit |
+| Dua CTA pada empty state dan page header | Pertahankan satu CTA di empty state | Satu aksi utama per konteks |
+| Eyebrow “FORMULIR PENGADUAN” dan badge “Status awal: Open” | Hapus | Judul sudah menjelaskan konteks; status adalah hasil sistem |
+| Card besar pembungkus seluruh form | Gunakan area form datar maksimal 720 px | Form tidak membutuhkan panel di dalam main surface |
 
 **Jangan dibuang:** empat ringkasan wajib IT, panduan prioritas, usia tiket, solusi, histori, identitas pengirim, error, konfirmasi penting, toggle tema, skip link, dan informasi aksesibilitas. Jangan tampilkan menu fitur yang belum diimplementasikan sebagai tombol kosong atau “coming soon”.
 
@@ -323,10 +352,14 @@ Urutan kerja:
 ### Acceptance checklist
 
 - [ ] Login langsung terlihat bagi pengunjung; setelah login/reload, halaman awal mengikuti role tanpa kilatan overview.
+- [ ] Tidak ada route/menu `Ringkasan`; status API/database tidak dirender dalam UI pengguna pada state sukses maupun gagal.
 - [ ] Elemen pada tabel pengurangan UI telah dibuang/disederhanakan tanpa menghilangkan fungsi wajib.
+- [ ] Daftar kosong tidak menampilkan search/filter dan hanya memiliki satu CTA Buat Tiket.
+- [ ] Form Buat Tiket tidak memiliki eyebrow, badge status awal, atau card pembungkus besar.
 - [ ] Light/Dark konsisten, tanpa flash tema salah, preferensi bertahan setelah reload, storage gagal tidak memblokir toggle.
 - [ ] Radius komponen hanya 0/4/8/12 px sesuai fungsi; tidak ada pill/dekorasi berlebihan.
 - [ ] Tampilan diuji pada lebar 360, 390, 768, 1024, dan 1440 px serta reflow 320 CSS px; tidak ada horizontal overflow halaman.
+- [ ] Pada mobile, konten halaman terlihat pada viewport pertama; sidebar hanya muncul setelah tombol menu diaktifkan.
 - [ ] Daftar mobile tetap menampilkan status, prioritas, penanggung jawab, serta pelapor/waktu/usia untuk antrean IT.
 - [ ] Semua role hanya melihat navigasi dan aksi yang berhak diakses; backend tetap menolak akses ilegal.
 - [ ] Loading, kosong, filter kosong, error, sukses, konflik claim, upload gagal, dan pesan gagal diuji.
