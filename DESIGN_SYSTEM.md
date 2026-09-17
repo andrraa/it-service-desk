@@ -35,7 +35,7 @@ Audit dilakukan setelah login sebagai akun User pada Light/Dark dan viewport des
 | Breadcrumb `Workspace / ...`, “INTERNAL WORKSPACE”, dan footer versi | Copy internal/development memenuhi layar | Hapus; gunakan judul halaman dan brand singkat |
 | Empty state masih menampilkan search/filter dan dua CTA Buat Tiket | Kontrol tidak berguna saat belum ada data | Pada daftar kosong, tampilkan satu CTA; search/filter muncul setelah ada tiket |
 | Form memakai eyebrow “FORMULIR PENGADUAN”, badge “Status awal: Open”, dan card besar | Informasi otomatis diperlakukan seperti keputusan pengguna | Hapus ketiganya; cukup judul, petunjuk singkat, field, dan aksi |
-| Desktop membatasi konten terlalu sempit dan menyisakan ruang kosong besar | Antrean/tabel sulit dipindai dan layar tidak dimanfaatkan | Daftar/antrean memakai lebar tersedia hingga 1280 px; form tetap maksimal 720 px |
+| Desktop membatasi konten terlalu sempit dan menyisakan ruang kosong besar | Antrean, detail, dan form tidak memanfaatkan layar | Seluruh halaman terautentikasi memakai 100% lebar area main setelah padding; tanpa `max-width` |
 | Mobile menumpuk seluruh sidebar di atas konten | Aksi utama berada jauh di bawah dan halaman tampak rusak | Sidebar menjadi drawer; topbar mobile hanya menu, judul singkat, dan tema |
 | Banyak panel bersarang dan border | Hierarki visual berat meski data sedikit | Gunakan spacing/separator; maksimal satu surface utama per area kerja |
 
@@ -132,7 +132,9 @@ Skala spacing: **4, 8, 12, 16, 24, 32, 48, 64 px**.
 - Sidebar desktop: 240 px; topbar: 64 px, mobile 56 px.
 - App shell setelah login: tinggi `100dvh` dan `overflow: hidden`; sidebar serta topbar tidak ikut scroll.
 - Hanya area konten utama di bawah topbar yang memakai `overflow-y: auto` dan `overscroll-behavior: contain`.
-- Konten daftar/dashboard: maksimal 1280 px; form tiket: 720 px; autentikasi: 400 px.
+- Seluruh child langsung pada main content terautentikasi memakai `width: 100%` dan `max-width: none`; daftar, dashboard, form, serta detail tidak dibatasi lebar maksimum.
+- Lebar visual dikendalikan oleh padding main dan grid internal, bukan container yang dipusatkan. Jangan menyisakan area kosong besar di sisi kanan.
+- Halaman autentikasi sebelum login boleh memakai panel terpusat yang ringkas karena bukan bagian dari workspace/main terautentikasi.
 - Kontrol interaktif: tinggi minimal 44 px; icon button minimal 44 × 44 px.
 - Textarea deskripsi/solusi: tinggi awal 144 px, dapat diperbesar vertikal.
 
@@ -307,7 +309,7 @@ Gunakan dua kolom yang terlihat bersamaan:
 └────────────────────────────┴──────────────────────────────────────┘
 ```
 
-- Kolom kiri **Informasi Tiket** memakai sekitar 38–42% lebar; kolom kanan **Ruang Chat** memakai sisa lebar dengan minimum nyaman 480 px.
+- Grid detail memakai `width: 100%` tanpa `max-width`. Kolom kiri **Informasi Tiket** memakai sekitar 38–42% lebar; kolom kanan **Ruang Chat** memakai sisa lebar.
 - Informasi tiket berada di kiri, ruang chat selalu di kanan. Jangan menaruh chat di bawah informasi pada desktop jika viewport masih memenuhi breakpoint.
 - Header halaman di atas kedua kolom memuat tombol kembali, nomor tiket, judul singkat, serta aksi berizin seperti Tutup Tiket.
 - Kolom kiri menggunakan section dan separator, bukan card terpisah untuk setiap metadata.
@@ -405,7 +407,7 @@ Daftar berikut adalah hasil audit browser dan instruksi wajib perubahan UI berik
 | Search/filter saat daftar benar-benar kosong | Sembunyikan sampai data tersedia | Kontrol tanpa data tidak memiliki hasil untuk dipersempit |
 | Dua CTA pada empty state dan page header | Pertahankan satu CTA di empty state | Satu aksi utama per konteks |
 | Eyebrow “FORMULIR PENGADUAN” dan badge “Status awal: Open” | Hapus | Judul sudah menjelaskan konteks; status adalah hasil sistem |
-| Card besar pembungkus seluruh form | Gunakan area form datar maksimal 720 px | Form tidak membutuhkan panel di dalam main surface |
+| Card besar pembungkus seluruh form | Gunakan area form datar selebar main content | Form tidak membutuhkan panel terpusat atau batas `max-width` |
 | File input bawaan browser | Ganti visual dengan kontrol “Pilih Berkas” custom + daftar file | Konsisten lintas browser dan lebih mudah memahami state upload |
 
 **Jangan dibuang:** empat ringkasan wajib IT, panduan prioritas, usia tiket, solusi, histori, identitas pengirim, error, konfirmasi penting, toggle tema, skip link, dan informasi aksesibilitas. Jangan tampilkan menu fitur yang belum diimplementasikan sebagai tombol kosong atau “coming soon”.
@@ -439,6 +441,7 @@ Urutan kerja:
 - [ ] Saat main content di-scroll pada desktop dan mobile, sidebar serta topbar tetap pada posisi semula.
 - [ ] Hanya main content memiliki scrollbar vertikal utama; tidak ada double scrollbar pada body/sidebar/panel.
 - [ ] Daftar mobile tetap menampilkan status, prioritas, penanggung jawab, serta pelapor/waktu/usia untuk antrean IT.
+- [ ] Semua halaman terautentikasi memenuhi lebar area main (`width: 100%; max-width: none`) tanpa container sempit terpusat.
 - [ ] Detail tiket desktop menampilkan Informasi Tiket di kiri dan Ruang Chat di kanan pada viewport ≥1024 px.
 - [ ] Detail tiket tablet/mobile berubah menjadi satu kolom: informasi utama → deskripsi/lampiran → solusi → chat → aktivitas.
 - [ ] Semua role hanya melihat navigasi dan aksi yang berhak diakses; backend tetap menolak akses ilegal.
