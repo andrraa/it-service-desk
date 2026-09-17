@@ -19,6 +19,12 @@
   let toggleError = $state('');
   let isUpdating = $state(false);
 
+  // Reset password confirmation modal
+  let resetTargetUser = $state<User | null>(null);
+  let resetError = $state('');
+  let issuedTempPassword = $state('');
+  let isResetting = $state(false);
+
   async function fetchUsers() {
     isLoading = true;
     errorMessage = '';
@@ -102,6 +108,36 @@
     }
   }
 
+  async function handleResetPassword() {
+    if (!resetTargetUser) return;
+    isResetting = true;
+    resetError = '';
+    issuedTempPassword = '';
+
+    try {
+      const res = await fetch(`/api/admin/users/${resetTargetUser.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'fetch',
+        },
+      });
+
+      const data: any = await res.json();
+      if (!res.ok) {
+        resetError = data.error?.message || 'Gagal mereset password.';
+        return;
+      }
+
+      issuedTempPassword = data.temporaryPassword;
+      await fetchUsers();
+    } catch {
+      resetError = 'Terjadi kesalahan jaringan saat menghubungi server.';
+    } finally {
+      isResetting = false;
+    }
+  }
+
   onMount(() => {
     void fetchUsers();
   });
@@ -161,7 +197,15 @@
               </td>
               <td>{u.mustChangePassword ? 'Ya (Password Baru)' : 'Tidak'}</td>
               <td class="cell-time">{new Date(u.createdAt).toLocaleDateString('id-ID')}</td>
-              <td>
+              <td class="cell-actions">
+                <button
+                  type="button"
+                  class="btn-reset-pw"
+                  title="Terbitkan password sementara 24 jam"
+                  onclick={() => { resetTargetUser = u; resetError = ''; issuedTempPassword = ''; }}
+                >
+                  Reset PW
+                </button>
                 {#if u.role !== 'Super Admin'}
                   <button
                     type="button"
@@ -236,6 +280,63 @@
               </button>
             </div>
           </form>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal Reset Password Admin -->
+  {#if resetTargetUser}
+    <div
+      class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-reset-title"
+      tabindex="-1"
+      onkeydown={(e) => { if (e.key === 'Escape') resetTargetUser = null; }}
+    >
+      <div class="modal-card">
+        <h3 id="modal-reset-title">Reset Password Pengguna</h3>
+        <p class="modal-sub">
+          Pengguna: <strong>{resetTargetUser.username}</strong> ({resetTargetUser.nik}) — Role: {resetTargetUser.role}
+        </p>
+
+        {#if resetError}
+          <div class="alert alert-error" role="alert" style="margin-top: 12px;">{resetError}</div>
+        {/if}
+
+        {#if issuedTempPassword}
+          <div class="alert alert-success" role="status" style="margin-top: 12px; flex-direction: column; align-items: flex-start;">
+            <strong>Password Sementara Berhasil Diterbitkan!</strong>
+            <p style="margin-top: 4px; font-size: 0.85rem;">Berlaku selama 24 jam. Salin dan sampaikan kepada pengguna melalui kanal aman:</p>
+            <div class="temp-password-box">
+              <code>{issuedTempPassword}</code>
+            </div>
+            <span style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 4px;">Seluruh sesi login lama pengguna ini telah otomatis dicabut.</span>
+          </div>
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button type="button" class="btn btn-primary" onclick={() => (resetTargetUser = null)}>
+              Tutup
+            </button>
+          </div>
+        {:else}
+          <p style="margin-top: 12px; font-size: 0.85rem; color: var(--color-text-muted); line-height: 1.5;">
+            Tindakan ini akan <strong>mencabut seluruh sesi aktif</strong> akun tersebut dan menghasilkan password sementara baru yang berlaku maksimal 24 jam. Pengguna akan diwajibkan membuat password baru setelah masuk.
+          </p>
+
+          <div class="modal-actions" style="margin-top: 20px;">
+            <button
+              type="button"
+              class="btn btn-primary"
+              disabled={isResetting}
+              onclick={handleResetPassword}
+            >
+              {isResetting ? 'Menerbitkan…' : 'Terbitkan Password Sementara'}
+            </button>
+            <button type="button" class="btn btn-secondary" onclick={() => (resetTargetUser = null)}>
+              Batal
+            </button>
+          </div>
         {/if}
       </div>
     </div>
@@ -337,6 +438,12 @@
     font-weight: 600;
   }
 
+  .cell-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
   .role-badge {
     padding: 2px 8px;
     border-radius: 4px;
@@ -367,6 +474,7 @@
   }
 
   .status-badge.active {
+    background-color: rgba(220, 38, 38, 0.1); /* fallback */
     background-color: rgba(22, 163, 74, 0.15);
     color: var(--color-success);
   }
@@ -374,6 +482,21 @@
   .status-badge.inactive {
     background-color: rgba(220, 38, 38, 0.15);
     color: var(--color-danger);
+  }
+
+  .btn-reset-pw {
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    color: var(--color-primary);
+  }
+
+  .btn-reset-pw:hover {
+    background-color: var(--color-bg);
   }
 
   .btn-toggle {

@@ -9,12 +9,13 @@
   import TicketDetail from './TicketDetail.svelte';
   import Dashboard from './Dashboard.svelte';
   import Admin from './Admin.svelte';
+  import Password from './Password.svelte';
   import type { User } from '../server/auth';
   import type { Ticket } from '../server/tickets';
 
   let currentUser = $state<User | null>(null);
   let isCheckingAuth = $state(true);
-  let currentView = $state<'overview' | 'register' | 'login' | 'tickets' | 'create-ticket' | 'ticket-detail' | 'dashboard' | 'admin'>('overview');
+  let currentView = $state<'overview' | 'register' | 'login' | 'tickets' | 'create-ticket' | 'ticket-detail' | 'dashboard' | 'admin' | 'password'>('overview');
   let selectedTicket = $state<Ticket | null>(null);
 
   async function checkAuth() {
@@ -23,6 +24,9 @@
       if (res.ok) {
         const data: any = await res.json();
         currentUser = data.user;
+        if (currentUser?.mustChangePassword) {
+          currentView = 'password';
+        }
       } else {
         currentUser = null;
       }
@@ -50,112 +54,122 @@
 <a class="skip-link" href="#main">Lewati ke konten utama</a>
 <div class="workspace">
   <aside class="sidebar" aria-label="Workspace">
-    <a class="brand" href="/" aria-label="IT Service Desk — beranda" onclick={(e) => { e.preventDefault(); currentView = 'overview'; }}>
+    <a class="brand" href="/" aria-label="IT Service Desk — beranda" onclick={(e) => { e.preventDefault(); if (!currentUser?.mustChangePassword) currentView = 'overview'; }}>
       <span class="brand-mark" aria-hidden="true">IT<span class="brand-dot">.</span></span>
       <span><strong>Service Desk</strong><small>INTERNAL WORKSPACE</small></span>
     </a>
 
     <nav aria-label="Navigasi utama">
-      <p class="nav-label">WORKSPACE</p>
-      <button
-        type="button"
-        class="nav-link"
-        class:active={currentView === 'overview'}
-        aria-current={currentView === 'overview' ? 'page' : undefined}
-        onclick={() => (currentView = 'overview')}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
-          <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-        </svg>
-        Ringkasan
-      </button>
+      {#if currentUser?.mustChangePassword}
+        <p class="nav-label">AKUN TERKUNCI</p>
+        <button type="button" class="nav-link active">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          Wajib Ganti Password
+        </button>
+      {:else}
+        <p class="nav-label">WORKSPACE</p>
+        <button
+          type="button"
+          class="nav-link"
+          class:active={currentView === 'overview'}
+          aria-current={currentView === 'overview' ? 'page' : undefined}
+          onclick={() => (currentView = 'overview')}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          Ringkasan
+        </button>
 
-      {#if currentUser}
-        {#if currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin'}
-          <p class="nav-label" style="margin-top: 16px;">OPERASIONAL</p>
+        {#if currentUser}
+          {#if currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin'}
+            <p class="nav-label" style="margin-top: 16px;">OPERASIONAL</p>
+            <button
+              type="button"
+              class="nav-link"
+              class:active={currentView === 'dashboard'}
+              aria-current={currentView === 'dashboard' ? 'page' : undefined}
+              onclick={() => (currentView = 'dashboard')}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+              </svg>
+              Dashboard Antrean IT
+            </button>
+          {/if}
+
+          {#if currentUser.role === 'Super Admin'}
+            <button
+              type="button"
+              class="nav-link"
+              class:active={currentView === 'admin'}
+              aria-current={currentView === 'admin' ? 'page' : undefined}
+              onclick={() => (currentView = 'admin')}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              Kelola Staf & Akun
+            </button>
+          {/if}
+
+          <p class="nav-label" style="margin-top: 16px;">LAYANAN TIKET</p>
           <button
             type="button"
             class="nav-link"
-            class:active={currentView === 'dashboard'}
-            aria-current={currentView === 'dashboard' ? 'page' : undefined}
-            onclick={() => (currentView = 'dashboard')}
+            class:active={currentView === 'tickets' || currentView === 'ticket-detail'}
+            aria-current={currentView === 'tickets' ? 'page' : undefined}
+            onclick={() => { currentView = 'tickets'; selectedTicket = null; }}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
             </svg>
-            Dashboard Antrean IT
+            Tiket Saya
           </button>
-        {/if}
 
-        {#if currentUser.role === 'Super Admin'}
           <button
             type="button"
             class="nav-link"
-            class:active={currentView === 'admin'}
-            aria-current={currentView === 'admin' ? 'page' : undefined}
-            onclick={() => (currentView = 'admin')}
+            class:active={currentView === 'create-ticket'}
+            aria-current={currentView === 'create-ticket' ? 'page' : undefined}
+            onclick={() => (currentView = 'create-ticket')}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            Kelola Staf & Akun
+            Buat Tiket Baru
+          </button>
+        {:else if !isCheckingAuth}
+          <p class="nav-label" style="margin-top: 16px;">AKUN</p>
+          <button
+            type="button"
+            class="nav-link"
+            class:active={currentView === 'login'}
+            aria-current={currentView === 'login' ? 'page' : undefined}
+            onclick={() => (currentView = 'login')}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" />
+            </svg>
+            Masuk
+          </button>
+
+          <button
+            type="button"
+            class="nav-link"
+            class:active={currentView === 'register'}
+            aria-current={currentView === 'register' ? 'page' : undefined}
+            onclick={() => (currentView = 'register')}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
+            </svg>
+            Daftar Akun
           </button>
         {/if}
-
-        <p class="nav-label" style="margin-top: 16px;">LAYANAN TIKET</p>
-        <button
-          type="button"
-          class="nav-link"
-          class:active={currentView === 'tickets' || currentView === 'ticket-detail'}
-          aria-current={currentView === 'tickets' ? 'page' : undefined}
-          onclick={() => { currentView = 'tickets'; selectedTicket = null; }}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
-          </svg>
-          Tiket Saya
-        </button>
-
-        <button
-          type="button"
-          class="nav-link"
-          class:active={currentView === 'create-ticket'}
-          aria-current={currentView === 'create-ticket' ? 'page' : undefined}
-          onclick={() => (currentView = 'create-ticket')}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Buat Tiket Baru
-        </button>
-      {:else if !isCheckingAuth}
-        <p class="nav-label" style="margin-top: 16px;">AKUN</p>
-        <button
-          type="button"
-          class="nav-link"
-          class:active={currentView === 'login'}
-          aria-current={currentView === 'login' ? 'page' : undefined}
-          onclick={() => (currentView = 'login')}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" />
-          </svg>
-          Masuk
-        </button>
-
-        <button
-          type="button"
-          class="nav-link"
-          class:active={currentView === 'register'}
-          aria-current={currentView === 'register' ? 'page' : undefined}
-          onclick={() => (currentView = 'register')}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
-          </svg>
-          Daftar Akun
-        </button>
       {/if}
     </nav>
 
@@ -192,6 +206,8 @@
             ? 'Dashboard IT'
             : currentView === 'admin'
             ? 'Panel Super Admin'
+            : currentView === 'password'
+            ? 'Ganti Password'
             : currentView === 'register'
             ? 'Daftar Akun'
             : currentView === 'login'
@@ -207,7 +223,15 @@
     </header>
 
     <main id="main" tabindex="-1">
-      {#if currentView === 'overview'}
+      {#if currentView === 'password' && currentUser}
+        <Password
+          {currentUser}
+          onSuccess={async () => {
+            await checkAuth();
+            currentView = currentUser.role === 'User' ? 'tickets' : 'dashboard';
+          }}
+        />
+      {:else if currentView === 'overview'}
         <div class="page-heading">
           <div>
             <p class="eyebrow">IT SERVICE DESK</p>
@@ -262,7 +286,11 @@
         <Login
           onSuccess={(user) => {
             currentUser = user;
-            currentView = user.role === 'User' ? 'tickets' : 'dashboard';
+            if (user.mustChangePassword) {
+              currentView = 'password';
+            } else {
+              currentView = user.role === 'User' ? 'tickets' : 'dashboard';
+            }
           }}
           onSwitchToRegister={() => (currentView = 'register')}
         />

@@ -103,14 +103,14 @@ Setiap task lulus check/test/build yang relevan sebelum dicentang. Lokasi file a
 - File: `src/server/admin.ts`, `src/web/Admin.svelte`, `src/server/auth.ts`, `src/server/tickets.ts`, `tests/admin.integration.ts`.
 
 ## 12a. Reset dan ganti password API
-- [ ] Implementasikan password sementara sekali tampil, expiry 24 jam, revoke sessions dan guard wajib ganti password.
+- [x] Implementasikan password sementara sekali tampil, expiry 24 jam, revoke sessions dan guard wajib ganti password.
 - Acceptance: hanya admin reset; hash-only storage; expired ditolak; restricted session tidak dapat memanggil fitur selain ganti password/logout.
 - Verifikasi: expiry, reset ulang, sesi lama, direct API bypass, concurrent resets dan password change.
 - Dependensi: 5 dan audit dari 7.
 - File: `migrations/008_password_reset.sql`, `src/server/auth.ts`, `src/server/admin.ts`, `tests/password.integration.ts`.
 
 ## 12b. UI pemulihan akses
-- [ ] Tambah petunjuk lupa password, aksi reset admin, ganti password biasa/wajib.
+- [x] Tambah petunjuk lupa password, aksi reset admin, ganti password biasa/wajib.
 - Acceptance: password sementara tidak masuk penyimpanan browser/log; aksi reset dikonfirmasi; navigasi wajib ganti konsisten dengan backend.
 - Verifikasi: flow reset → login sementara → ganti → login normal; expired dan gagal validasi; keyboard dan kedua tema.
 - Dependensi: 11 dan 12a.

@@ -297,6 +297,88 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     return await getSessionUser(ctx.sql, sessionId);
   };
 
+  // Change Password Endpoint: POST /api/auth/change-password
+  if (pathname === '/api/auth/change-password') {
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (request.method !== 'POST') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+    }
+
+    const { validateChangePasswordInput } = await import('./password');
+    const validation = validateChangePasswordInput(body, user.mustChangePassword);
+    if (!validation.valid) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: 'Data password tidak valid.', details: validation.errors } }, 422);
+    }
+
+    const { currentPassword, newPassword } = validation.data;
+
+    try {
+      const userRows = await ctx.sql`SELECT id, password_hash AS "passwordHash" FROM users WHERE id = ${user.id} LIMIT 1`;
+      const currentDbUser = userRows[0] as { id: number | string; passwordHash: string };
+
+      // Normal password change requires current password check
+      if (!user.mustChangePassword && currentPassword) {
+        const isMatch = await verifyPassword(currentPassword, currentDbUser.passwordHash);
+        if (!isMatch) {
+          return json({ error: { code: 'UNAUTHORIZED', message: 'Password saat ini salah.' } }, 401);
+        }
+      }
+
+      const newHash = await hashPassword(newPassword);
+
+      await ctx.sql`
+        UPDATE users
+        SET password_hash = ${newHash}, must_change_password = FALSE, updated_at = NOW()
+        WHERE id = ${user.id}
+      `;
+
+      // Revoke any temporary resets
+      await ctx.sql`
+        UPDATE password_resets
+        SET used_at = NOW()
+        WHERE user_id = ${user.id} AND used_at IS NULL
+      `;
+
+      return json({ message: 'Password berhasil diperbarui.' });
+    } catch (err) {
+      console.error('Change password error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal memperbarui password.' } }, 500);
+    }
+  }
+
+  // Restricted Session Guard: jika user memiliki must_change_password = TRUE,
+  // maka SELURUH endpoint selain /api/auth/me, /api/auth/logout, dan /api/auth/change-password HARUS ditolak di backend!
+  const isExcludedFromRestriction = [
+    '/api/health',
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/logout',
+    '/api/auth/me',
+    '/api/auth/change-password',
+  ].includes(pathname);
+
+  if (!isExcludedFromRestriction) {
+    const authCheck = await getAuthUser();
+    if (authCheck && authCheck.mustChangePassword) {
+      return json({
+        error: {
+          code: 'PASSWORD_CHANGE_REQUIRED',
+          message: 'Anda wajib mengganti password sementara terlebih dahulu sebelum dapat mengakses fitur lain.',
+        },
+      }, 403);
+    }
+  }
+
   // Dashboard IT Summary: GET /api/dashboard/summary
   if (pathname === '/api/dashboard/summary') {
     const user = await getAuthUser();
@@ -1429,6 +1511,75 @@ export async function handleRequest(request: Request, ctx: AppContext) {
     } catch (err) {
       console.error('Reassign error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengalihkan tiket.' } }, 500);
+    }
+  }
+
+  // Reset User Password: POST /api/admin/users/:id/reset-password
+  const resetPassMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-password$/);
+  if (resetPassMatch) {
+    const targetUserId = resetPassMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya Super Admin yang berhak mereset password pengguna.' } }, 403);
+    }
+    if (request.method !== 'POST') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
+    }
+
+    try {
+      const targetRows = await ctx.sql`
+        SELECT id, username, nik, role FROM users WHERE id = ${targetUserId} LIMIT 1
+      `;
+      if (targetRows.length === 0) {
+        return json({ error: { code: 'NOT_FOUND', message: 'Pengguna tidak ditemukan.' } }, 404);
+      }
+      const target = targetRows[0];
+
+      const { generateTemporaryPassword } = await import('./admin');
+      const tempPass = generateTemporaryPassword();
+      const tempPassHash = await hashPassword(tempPass);
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours per PRD
+
+      // Atomic reset: revoke all sessions, update user password to temp, set must_change_password=TRUE, insert reset log
+      await ctx.sql.begin(async (tx) => {
+        // 1. Revoke existing sessions immediately
+        await tx`DELETE FROM sessions WHERE user_id = ${target.id}`;
+
+        // 2. Invalidate previous unexpired resets
+        await tx`
+          UPDATE password_resets
+          SET used_at = NOW()
+          WHERE user_id = ${target.id} AND used_at IS NULL
+        `;
+
+        // 3. Record new temporary password reset
+        await tx`
+          INSERT INTO password_resets (user_id, admin_id, temp_password_hash, expires_at)
+          VALUES (${target.id}, ${user.id}, ${tempPassHash}, ${expiresAt.toISOString()})
+        `;
+
+        // 4. Update user
+        await tx`
+          UPDATE users
+          SET 
+            password_hash = ${tempPassHash},
+            must_change_password = TRUE,
+            updated_at = NOW()
+          WHERE id = ${target.id}
+        `;
+      });
+
+      return json({
+        message: 'Password sementara berhasil diterbitkan.',
+        temporaryPassword: tempPass, // Display once only to admin
+        expiresAt: expiresAt.toISOString(),
+      });
+    } catch (err) {
+      console.error('Reset password error:', err);
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mereset password pengguna.' } }, 500);
     }
   }
 
