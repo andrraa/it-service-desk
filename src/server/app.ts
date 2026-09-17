@@ -113,7 +113,10 @@ export async function handleRequest(request: Request, ctx: AppContext) {
 
       const newUser = inserted[0];
       return json({ message: 'Registrasi berhasil.', user: newUser }, 201);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.code === '23505' || err?.errno === '23505') {
+        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: { _conflict: 'NIK atau Username sudah digunakan.' } } }, 409);
+      }
       console.error('Registration error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem.' } }, 500);
     }
