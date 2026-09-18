@@ -658,8 +658,8 @@ dialog::backdrop {
   font-weight: 600;
 }
 
-/* Main Content Area */
-main#main {
+/* Main Content Area (Authenticated Workspace) */
+.app-workspace > main#main {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
