@@ -650,16 +650,6 @@ dialog::backdrop {
   gap: 16px;
 }
 
-.brand-mark-logo {
-  background: var(--color-primary);
-  color: var(--color-primary-text);
-  font-weight: 800;
-  font-size: 0.875rem;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0.05em;
-}
-
 .topbar-right {
   display: flex;
   align-items: center;

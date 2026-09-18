@@ -161,7 +161,6 @@
           class="brand-title"
           onclick={() => closeDrawer()}
         >
-          <span class="brand-mark-logo" aria-hidden="true">IT</span>
           IT Service Desk
         </a>
       </div>
