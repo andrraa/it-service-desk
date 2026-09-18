@@ -213,7 +213,7 @@
   {/if}
 
   {#if isLoading}
-    <div class="loading-state">
+    <div class="loading-state" role="status" aria-live="polite">
       <p>Memuat data pengguna…</p>
     </div>
   {:else}

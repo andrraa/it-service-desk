@@ -192,7 +192,7 @@
   {/if}
 
   {#if isLoading}
-    <div class="loading-state">
+    <div class="loading-state" role="status" aria-live="polite">
       <p>Memuat detail tiket…</p>
     </div>
   {:else if ticket}

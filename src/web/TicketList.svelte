@@ -191,7 +191,7 @@
     {/if}
 
     {#if isLoading}
-      <div class="loading-state">
+      <div class="loading-state" role="status" aria-live="polite">
         <p>Memuat daftar tiket…</p>
       </div>
     {:else if tickets.length === 0}

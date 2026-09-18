@@ -116,7 +116,7 @@
       <ThemeToggle />
     </header>
     <main id="main" class="unauth-main" tabindex="-1">
-      <div class="loading-state">
+      <div class="loading-state" role="status" aria-live="polite">
         <p>Memeriksa sesi pengguna…</p>
       </div>
     </main>
