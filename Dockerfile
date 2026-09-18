@@ -25,7 +25,7 @@ COPY --from=builder /app/package.json /app/bun.lock ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/migrations ./migrations
-COPY --from=builder /app/src/server/migrate.ts ./src/server/migrate.ts
+COPY --from=builder /app/src/server ./src/server
 COPY --from=builder /app/scripts ./scripts
 
 # Create uploads directory with restricted permissions
