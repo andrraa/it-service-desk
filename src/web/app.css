@@ -788,7 +788,16 @@ dialog::backdrop {
     padding: 0 16px;
   }
 
-  .btn-mobile-menu span,
+  .btn-mobile-menu {
+    width: 44px;
+    padding: 0;
+    gap: 0;
+  }
+
+  .btn-mobile-menu span {
+    display: none;
+  }
+
   .theme-toggle {
     font-size: 0;
   }
