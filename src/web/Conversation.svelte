@@ -157,7 +157,7 @@
     </button>
   {/if}
 
-  <!-- Messages List: No separate scrollbar, flows naturally with main scroll -->
+  <!-- Messages List -->
   <div class="messages-list">
     {#if messages.length === 0}
       <p class="empty-chat-text">Belum ada pesan dalam tiket ini. Mulai percakapan untuk berdiskusi dengan tim penanganan.</p>
@@ -313,6 +313,10 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    max-height: 480px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 8px;
   }
 
   .empty-chat-text {
