@@ -309,6 +309,11 @@
             {currentUser}
             onSuccess={async () => {
               await checkAuth();
+              if (currentUser && !currentUser.mustChangePassword) {
+                const destination = getDefaultPathForRole(currentUser.role);
+                navigate(destination, { replace: true });
+                currentRoute = parseRoute(destination);
+              }
             }}
           />
         {:else if currentRoute.view === 'admin-users' && currentUser.role === 'Super Admin'}
