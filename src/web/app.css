@@ -351,6 +351,44 @@ label {
   border-color: var(--color-info);
 }
 
+/* Shared Loading State */
+.loading-state {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* Theme Toggle */
+.theme-control {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  background: var(--color-surface-hover);
+}
+
 /* Modals & Dialogs */
 dialog {
   border: 1px solid var(--color-border);
@@ -484,9 +522,26 @@ dialog::backdrop {
   gap: 12px;
 }
 
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.user-avatar {
+  flex: 0 0 36px;
+  padding: 6px;
+  border-radius: 50%;
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+}
+
 .user-profile-info {
   display: flex;
+  min-width: 0;
   flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
 }
 
@@ -548,6 +603,13 @@ dialog::backdrop {
   align-items: center;
   gap: 16px;
   min-width: 0;
+}
+
+.topbar-title {
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .btn-mobile-menu {
@@ -648,6 +710,29 @@ main#main {
 @media (max-width: 767px) {
   .app-topbar {
     padding: 0 16px;
+  }
+
+  .btn-mobile-menu span,
+  .theme-toggle {
+    font-size: 0;
+  }
+
+  .btn-mobile-menu svg,
+  .theme-toggle svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .nav-breadcrumb li:first-child,
+  .nav-breadcrumb li:nth-child(2) {
+    display: none;
+  }
+
+  .nav-breadcrumb strong {
+    display: block;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   main#main {
