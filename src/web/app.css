@@ -815,8 +815,8 @@ dialog::backdrop {
     text-overflow: ellipsis;
   }
 
-  main#main {
-    padding: 16px;
+  .app-workspace > main#main {
+    padding: 12px;
   }
 }
 
