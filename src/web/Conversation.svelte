@@ -126,6 +126,12 @@
     }
   }
 
+  function handleComposerKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
+  }
+
   onMount(() => {
     void fetchMessages();
     const interval = setInterval(() => {
@@ -233,6 +239,7 @@
           bind:value={newMessage}
           placeholder="Tulis pesan untuk tim IT…"
           disabled={isSending || deliveryUncertain}
+          onkeydown={handleComposerKeydown}
         ></textarea>
 
         <div class="composer-actions">
