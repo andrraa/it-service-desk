@@ -196,19 +196,19 @@
               <td>{u.mustChangePassword ? 'Ya (Password Baru)' : 'Tidak'}</td>
               <td class="cell-time">{new Date(u.createdAt).toLocaleDateString('id-ID')}</td>
               <td class="cell-actions">
-                <button
-                  type="button"
-                  class="btn-reset-pw"
-                  title="Reset password"
-                  aria-label={`Reset password ${u.fullName || u.username}`}
-                  onclick={() => { resetTargetUser = u; resetError = ''; issuedTempPassword = ''; }}
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.64.96.3.27.68.42 1.08.44H21v4h-.1A1.7 1.7 0 0 0 19.4 15Z" />
-                  </svg>
-                </button>
                 {#if u.role !== 'Super Admin'}
+                  <button
+                    type="button"
+                    class="btn-reset-pw"
+                    title="Reset password"
+                    aria-label={`Reset password ${u.fullName || u.username}`}
+                    onclick={() => { resetTargetUser = u; resetError = ''; issuedTempPassword = ''; }}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.64.96.3.27.68.42 1.08.44H21v4h-.1A1.7 1.7 0 0 0 19.4 15Z" />
+                    </svg>
+                  </button>
                   <button
                     type="button"
                     class="btn-toggle"
@@ -228,8 +228,6 @@
                       </svg>
                     {/if}
                   </button>
-                {:else}
-                  <span class="text-protected">Dilindungi</span>
                 {/if}
               </td>
             </tr>
@@ -536,8 +534,8 @@
   }
 
   .btn-disable:hover {
-    background-color: var(--color-danger);
-    color: #ffffff;
+    background-color: var(--color-danger-bg);
+    color: var(--color-danger);
   }
 
   .btn-enable {
