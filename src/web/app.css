@@ -831,6 +831,16 @@ dialog::backdrop {
   .app-workspace > main#main {
     padding: 16px;
   }
+
+  .content-breadcrumb {
+    margin-bottom: 12px;
+  }
+
+  .page-header,
+  .page-heading,
+  .form-header {
+    margin-bottom: 16px;
+  }
 }
 
 /* Reduced Motion */
