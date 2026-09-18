@@ -79,7 +79,7 @@
 
   <form onsubmit={handleSubmit} novalidate class="auth-form">
     <div class="form-group">
-      <label for="login-username">Username</label>
+      <label for="login-username">Username <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="login-username"
         type="text"
@@ -98,7 +98,7 @@
 
     <div class="form-group">
       <div class="label-row">
-        <label for="login-password">Password</label>
+        <label for="login-password">Password <span class="required-mark" aria-hidden="true">*</span></label>
         <button type="button" class="forgot-link" onclick={() => (showForgotPasswordModal = true)}>
           Lupa password?
         </button>

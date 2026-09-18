@@ -511,7 +511,7 @@
 
       <form onsubmit={(e) => { e.preventDefault(); void submitPriorityChange(); }} style="margin-top: 16px; display: flex; flex-direction: column; gap: 16px;">
         <div class="form-group">
-          <label for="queue-prio-select">Prioritas Baru</label>
+          <label for="queue-prio-select">Prioritas Baru <span class="required-mark" aria-hidden="true">*</span></label>
           <select id="queue-prio-select" bind:value={newPriority} disabled={isUpdatingPriority}>
             <option value="Critical">Critical: Layanan penting berhenti</option>
             <option value="High">High: Pekerjaan utama terhambat</option>
@@ -521,7 +521,7 @@
         </div>
 
         <div class="form-group">
-          <label for="queue-prio-reason">Alasan Perubahan (Wajib Audit)</label>
+          <label for="queue-prio-reason">Alasan Perubahan <span class="required-mark" aria-hidden="true">*</span></label>
           <textarea
             id="queue-prio-reason"
             rows="3"

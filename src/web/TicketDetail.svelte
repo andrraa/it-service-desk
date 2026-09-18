@@ -294,7 +294,7 @@
 
       <form onsubmit={(e) => { e.preventDefault(); void handleCloseTicket(); }} style="margin-top: 16px; display: flex; flex-direction: column; gap: 16px;">
         <div class="form-group">
-          <label for="close-solution-text">Solusi Penanganan (Wajib)</label>
+          <label for="close-solution-text">Solusi Penanganan <span class="required-mark" aria-hidden="true">*</span></label>
           <textarea
             id="close-solution-text"
             rows="4"
@@ -339,7 +339,7 @@
 
       <form onsubmit={(e) => { e.preventDefault(); void submitPriorityChange(); }} style="margin-top: 16px; display: flex; flex-direction: column; gap: 16px;">
         <div class="form-group">
-          <label for="prio-select">Prioritas Baru</label>
+          <label for="prio-select">Prioritas Baru <span class="required-mark" aria-hidden="true">*</span></label>
           <select id="prio-select" bind:value={newPriority} disabled={isUpdatingPriority}>
             <option value="Critical">Critical: Layanan penting berhenti</option>
             <option value="High">High: Pekerjaan utama terhambat</option>
@@ -349,7 +349,7 @@
         </div>
 
         <div class="form-group">
-          <label for="prio-reason-text">Alasan Perubahan (Wajib Audit)</label>
+          <label for="prio-reason-text">Alasan Perubahan <span class="required-mark" aria-hidden="true">*</span></label>
           <textarea
             id="prio-reason-text"
             rows="3"

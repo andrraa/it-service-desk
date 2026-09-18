@@ -262,12 +262,12 @@
         {:else}
           <form onsubmit={handleCreateITStaff} class="staff-form" style="margin-top: 14px;">
             <div class="form-group">
-              <label for="staff-fullname">Nama Lengkap</label>
+              <label for="staff-fullname">Nama Lengkap <span class="required-mark" aria-hidden="true">*</span></label>
               <input id="staff-fullname" type="text" bind:value={newFullName} placeholder="Contoh: Budi Santoso" required disabled={isCreating} />
             </div>
 
             <div class="form-group">
-              <label for="staff-username">Username Staf</label>
+              <label for="staff-username">Username Staf <span class="required-mark" aria-hidden="true">*</span></label>
               <input id="staff-username" type="text" bind:value={newUsername} placeholder="Contoh: budi.it" required disabled={isCreating} />
             </div>
 

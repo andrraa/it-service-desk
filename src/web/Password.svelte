@@ -93,7 +93,7 @@
   <form onsubmit={handleSubmit} class="password-form">
     {#if !currentUser.mustChangePassword}
       <div class="form-group">
-        <label for="cur-pass">Password Saat Ini</label>
+        <label for="cur-pass">Password Saat Ini <span class="required-mark" aria-hidden="true">*</span></label>
         <input
           id="cur-pass"
           type="password"
@@ -108,7 +108,7 @@
     {/if}
 
     <div class="form-group">
-      <label for="new-pass">Password Baru</label>
+      <label for="new-pass">Password Baru <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="new-pass"
         type="password"
@@ -124,7 +124,7 @@
     </div>
 
     <div class="form-group">
-      <label for="conf-pass">Konfirmasi Password Baru</label>
+      <label for="conf-pass">Konfirmasi Password Baru <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="conf-pass"
         type="password"

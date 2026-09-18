@@ -235,7 +235,7 @@
 
   <form onsubmit={handleSubmit} novalidate class="ticket-form">
     <div class="form-group">
-      <label for="ticket-title">Judul Kendala</label>
+      <label for="ticket-title">Judul Kendala <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="ticket-title"
         type="text"
@@ -253,7 +253,7 @@
     </div>
 
     <div class="form-group">
-      <label for="ticket-priority">Tingkat Prioritas</label>
+      <label for="ticket-priority">Tingkat Prioritas <span class="required-mark" aria-hidden="true">*</span></label>
       <select
         id="ticket-priority"
         bind:value={priority}
@@ -268,7 +268,7 @@
     </div>
 
     <div class="form-group">
-      <label for="ticket-description">Deskripsi Kendala</label>
+      <label for="ticket-description">Deskripsi Kendala <span class="required-mark" aria-hidden="true">*</span></label>
       <textarea
         id="ticket-description"
         rows="5"

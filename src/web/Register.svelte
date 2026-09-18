@@ -103,7 +103,7 @@
 
   <form onsubmit={handleSubmit} novalidate class="auth-form">
     <div class="form-group">
-      <label for="fullName">Nama Lengkap</label>
+      <label for="fullName">Nama Lengkap <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="fullName"
         type="text"
@@ -122,7 +122,7 @@
     </div>
 
     <div class="form-group">
-      <label for="username">Username</label>
+      <label for="username">Username <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="username"
         type="text"
@@ -140,7 +140,7 @@
     </div>
 
     <div class="form-group">
-      <label for="password">Password</label>
+      <label for="password">Password <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="password"
         type="password"
@@ -160,7 +160,7 @@
     </div>
 
     <div class="form-group">
-      <label for="confirmPassword">Konfirmasi Password</label>
+      <label for="confirmPassword">Konfirmasi Password <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="confirmPassword"
         type="password"
