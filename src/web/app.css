@@ -504,7 +504,9 @@ dialog::backdrop {
   font-weight: 700;
   color: var(--color-text);
   text-decoration: none;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   letter-spacing: -0.01em;
 }
 
@@ -648,19 +650,6 @@ dialog::backdrop {
   gap: 16px;
 }
 
-.topbar-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-  color: var(--color-text);
-  font-weight: 700;
-}
-
-.topbar-brand:hover {
-  text-decoration: none;
-}
-
 .brand-mark-logo {
   background: var(--color-primary);
   color: var(--color-primary-text);
@@ -669,11 +658,6 @@ dialog::backdrop {
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   letter-spacing: 0.05em;
-}
-
-.topbar-separator {
-  color: var(--color-border);
-  user-select: none;
 }
 
 .topbar-right {
