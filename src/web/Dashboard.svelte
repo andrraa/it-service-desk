@@ -368,30 +368,32 @@
                   <span class="age-badge tabular-nums">{formatAge(ticket.createdAt)}</span>
                 </div>
               </td>
-              <td class="cell-actions">
-                <a
-                  href={`/tickets/${ticket.ticketNumber}`}
-                  class="btn btn-secondary btn-sm"
-                  onclick={(e) => handleOpenTicket(e, ticket)}
-                >
-                  Detail
-                </a>
-                {#if ticket.status === 'Open' && !ticket.assigneeId}
+              <td class="cell-actions-col">
+                <div class="actions-wrapper">
+                  <a
+                    href={`/tickets/${ticket.ticketNumber}`}
+                    class="btn btn-secondary btn-sm"
+                    onclick={(e) => handleOpenTicket(e, ticket)}
+                  >
+                    Detail
+                  </a>
+                  {#if ticket.status === 'Open' && !ticket.assigneeId}
+                    <button
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                      onclick={(e) => handleClaim(ticket, e)}
+                    >
+                      Ambil Tiket
+                    </button>
+                  {/if}
                   <button
                     type="button"
-                    class="btn btn-primary btn-sm"
-                    onclick={(e) => handleClaim(ticket, e)}
+                    class="btn btn-secondary btn-sm"
+                    onclick={(e) => openPriorityModal(ticket, e)}
                   >
-                    Ambil Tiket
+                    Prioritas
                   </button>
-                {/if}
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm"
-                  onclick={(e) => openPriorityModal(ticket, e)}
-                >
-                  Prioritas
-                </button>
+                </div>
               </td>
             </tr>
           {/each}
@@ -794,11 +796,16 @@
     font-weight: 600;
   }
 
-  .cell-actions {
-    display: flex;
+  .cell-actions-col {
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  .actions-wrapper {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    white-space: nowrap;
+    vertical-align: middle;
   }
 
   .btn-sm {
