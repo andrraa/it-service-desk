@@ -66,7 +66,7 @@
 }
 
 html, body, #app {
-  min-height: 100%;
+  height: 100%;
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
@@ -409,11 +409,12 @@ dialog::backdrop {
 
 /* App Layout: Unauthenticated */
 .unauth-shell {
-  min-height: 100vh;
+  height: 100%;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg);
+  overflow-y: auto;
 }
 
 .unauth-topbar {
@@ -438,8 +439,8 @@ dialog::backdrop {
 /* App Layout: Authenticated */
 .auth-shell {
   display: flex;
-  height: 100dvh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   overflow: hidden;
   background-color: var(--color-bg);
 }
@@ -583,7 +584,7 @@ dialog::backdrop {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: 100%;
   overflow: hidden;
 }
 
