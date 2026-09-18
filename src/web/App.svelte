@@ -306,7 +306,6 @@
               <span class="user-display-name" title={currentUser.fullName || currentUser.username}>
                 {currentUser.fullName || currentUser.username}
               </span>
-              <span class="badge-role badge-neutral">{currentUser.role}</span>
             </div>
           </div>
         </div>
