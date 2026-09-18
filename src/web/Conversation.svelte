@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Attachments from './Attachments.svelte';
   import type { TicketMessage } from '../server/messages';
   import type { User } from '../server/auth';
@@ -20,6 +20,8 @@
   let errorMessage = $state('');
   let sendError = $state('');
   let deliveryUncertain = $state(false);
+  let messageListEl = $state<HTMLDivElement>();
+  let composerEl = $state<HTMLTextAreaElement>();
 
   let requestId = crypto.randomUUID();
   let hasOlder = $state(false);
@@ -82,6 +84,7 @@
 
   async function handleSendMessage(e: Event) {
     e.preventDefault();
+    let sentSuccessfully = false;
     const textToSend = newMessage.trim();
     if (!textToSend && selectedFiles.length === 0) return;
 
@@ -119,10 +122,16 @@
       selectedFiles = [];
       requestId = crypto.randomUUID();
       await fetchMessages();
+      sentSuccessfully = true;
     } catch {
       sendError = 'Kiriman belum terkonfirmasi. Draft dan berkas tetap tersimpan; tekan Kirim untuk mencoba kembali tanpa duplikat.';
     } finally {
       isSending = false;
+      if (sentSuccessfully) {
+        await tick();
+        composerEl?.focus();
+        messageListEl?.scrollTo({ top: messageListEl.scrollHeight, behavior: 'smooth' });
+      }
     }
   }
 
@@ -164,7 +173,7 @@
   {/if}
 
   <!-- Messages List -->
-  <div class="messages-list">
+  <div class="messages-list" bind:this={messageListEl}>
     {#if messages.length === 0}
       <p class="empty-chat-text">Belum ada pesan dalam tiket ini. Mulai percakapan untuk berdiskusi dengan tim penanganan.</p>
     {:else}
@@ -234,6 +243,7 @@
       <div class="composer-inputs">
         <label class="sr-only" for="chat-message-input">Tulis pesan</label>
         <textarea
+          bind:this={composerEl}
           id="chat-message-input"
           rows="3"
           bind:value={newMessage}
