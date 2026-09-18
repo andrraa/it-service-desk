@@ -36,4 +36,6 @@ services:
 
 volumes:
   pg_data:
+    name: it-service-desk-pg-data
   uploads_data:
+    name: it-service-desk-uploads-data

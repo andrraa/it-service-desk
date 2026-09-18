@@ -75,7 +75,7 @@ docker exec -i it-service-desk-prod-db pg_restore -U it_service_desk -d it_servi
 
 ### C. Backup Volume Lampiran Privat
 ```bash
-docker run --rm -v it-service-desk_uploads_data:/volume -v $(pwd):/backup alpine tar -czf /backup/backup_uploads_$(date +%Y%m%d_%H%M%S).tar.gz -C /volume .
+docker run --rm -v it-service-desk-uploads-data:/volume -v $(pwd):/backup alpine tar -czf /backup/backup_uploads_$(date +%Y%m%d_%H%M%S).tar.gz -C /volume .
 ```
 
 ---
