@@ -792,6 +792,7 @@ dialog::backdrop {
     width: 44px;
     padding: 0;
     gap: 0;
+    justify-content: center;
   }
 
   .btn-mobile-menu span {
