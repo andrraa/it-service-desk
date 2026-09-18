@@ -199,10 +199,14 @@
                 <button
                   type="button"
                   class="btn-reset-pw"
-                  title="Terbitkan password sementara 24 jam"
+                  title="Reset password"
+                  aria-label={`Reset password ${u.fullName || u.username}`}
                   onclick={() => { resetTargetUser = u; resetError = ''; issuedTempPassword = ''; }}
                 >
-                  Reset PW
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.64.96.3.27.68.42 1.08.44H21v4h-.1A1.7 1.7 0 0 0 19.4 15Z" />
+                  </svg>
                 </button>
                 {#if u.role !== 'Super Admin'}
                   <button
@@ -210,9 +214,19 @@
                     class="btn-toggle"
                     class:btn-disable={u.isActive}
                     class:btn-enable={!u.isActive}
+                    title={u.isActive ? 'Nonaktifkan akun' : 'Aktifkan akun'}
+                    aria-label={`${u.isActive ? 'Nonaktifkan' : 'Aktifkan'} akun ${u.fullName || u.username}`}
                     onclick={() => { targetUser = u; toggleError = ''; }}
                   >
-                    {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                    {#if u.isActive}
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" /><line x1="8" y1="8" x2="16" y2="16" />
+                      </svg>
+                    {:else}
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" /><polyline points="8 12 11 15 16 9" />
+                      </svg>
+                    {/if}
                   </button>
                 {:else}
                   <span class="text-protected">Dilindungi</span>
@@ -493,11 +507,6 @@
   }
 
   .btn-reset-pw {
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
     border: 1px solid var(--color-border);
     background-color: var(--color-surface);
     color: var(--color-primary);
@@ -507,13 +516,17 @@
     background-color: var(--color-bg);
   }
 
+  .btn-reset-pw,
   .btn-toggle {
-    padding: 4px 10px;
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    font-weight: 600;
     cursor: pointer;
-    border: none;
   }
 
   .btn-disable {
