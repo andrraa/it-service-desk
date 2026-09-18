@@ -41,6 +41,7 @@
         <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
       {/if}
     </svg>
+    <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
   </button>
   <span class="sr-only" role="status">{storageWarning}</span>
 </div>
