@@ -1170,7 +1170,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
           AND (${searchPattern ? ctx.sql`(t.ticket_number ILIKE ${searchPattern} OR t.title ILIKE ${searchPattern} OR t.description ILIKE ${searchPattern})` : ctx.sql`TRUE`})`;
         const ticketsQuery = await ctx.sql`
           SELECT t.id, t.ticket_number AS "ticketNumber", t.creator_id AS "creatorId",
-            u.username AS "creatorUsername", u.nik AS "creatorNik", t.assignee_id AS "assigneeId",
+            u.username AS "creatorUsername", t.assignee_id AS "assigneeId",
             a.username AS "assigneeUsername", t.title, t.description, t.priority, t.status,
             t.created_at AS "createdAt", t.updated_at AS "updatedAt"
           FROM tickets t JOIN users u ON t.creator_id = u.id LEFT JOIN users a ON t.assignee_id = a.id

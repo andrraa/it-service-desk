@@ -68,6 +68,28 @@ describe('Ticket Endpoints (/api/tickets)', () => {
     expect(body.ticket.priority).toBe('High');
   });
 
+  test('GET /api/tickets lists tickets without querying removed NIK column', async () => {
+    const mockSql = createMockSql((query) => {
+      expect(query).not.toContain('.nik');
+      if (query.includes('FROM sessions')) {
+        return [{ id: '1', username: 'user_a', role: 'User', isActive: true, mustChangePassword: false, createdAt: new Date().toISOString() }];
+      }
+      if (query.includes('COUNT(*)')) return [{ count: 1 }];
+      if (query.includes('FROM tickets')) {
+        return [{ id: '2', ticketNumber: 'TKT-000002', creatorId: '1', creatorUsername: 'user_a', title: 'Laptop error', description: 'Layar laptop bergaris', priority: 'Medium', status: 'Open', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }];
+      }
+      return [];
+    });
+
+    const res = await handleRequest(new Request('http://localhost/api/tickets?mine=true', {
+      headers: { Cookie: 'session_id=valid_token' },
+    }), { sql: mockSql });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tickets).toHaveLength(1);
+  });
+
   test('GET /api/tickets/:id forbids User from viewing other user tickets', async () => {
     const mockSql = createMockSql((query) => {
       if (query.includes('FROM sessions')) {

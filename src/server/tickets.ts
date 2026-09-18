@@ -6,7 +6,6 @@ export interface Ticket {
   ticketNumber: string;
   creatorId: string;
   creatorUsername?: string;
-  creatorNik?: string;
   assigneeId?: string | null;
   assigneeUsername?: string | null;
   title: string;
