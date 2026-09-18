@@ -244,9 +244,15 @@
       </nav>
 
       <div class="sidebar-user">
-        <div class="user-profile-info">
-          <span class="user-display-name" title={currentUser.username}>{currentUser.username}</span>
-          <span class="badge-role badge-neutral">{currentUser.role}</span>
+        <div class="user-profile">
+          <svg class="user-avatar" viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21a8 8 0 0 1 16 0" />
+          </svg>
+          <div class="user-profile-info">
+            <span class="user-display-name" title={currentUser.username}>{currentUser.username}</span>
+            <span class="badge-role badge-neutral">{currentUser.role}</span>
+          </div>
         </div>
         <button type="button" class="btn-logout" onclick={handleLogout}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -278,8 +284,12 @@
             <span>Menu</span>
           </button>
 
+          {#if currentRoute.view === 'tickets'}
+            <span class="topbar-title">Tiket Saya</span>
+          {:else if currentRoute.view === 'it-queue'}
+            <span class="topbar-title">Antrean IT</span>
           <!-- Real Navigable Breadcrumb: only on subpages -->
-          {#if currentRoute.view === 'tickets-new'}
+          {:else if currentRoute.view === 'tickets-new'}
             <nav aria-label="Breadcrumb">
               <ol class="nav-breadcrumb">
                 <li><a href="/tickets">Tiket Saya</a></li>
