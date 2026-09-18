@@ -8,4 +8,5 @@ coverage/
 *.key
 *.log
 uploads/
+/scripts/deploy-prod.local.sh
 .DS_Store
