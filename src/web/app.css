@@ -721,7 +721,7 @@ dialog::backdrop {
   display: grid;
   place-items: center;
   border: 1px solid var(--color-control-border);
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;

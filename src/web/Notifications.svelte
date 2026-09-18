@@ -14,6 +14,7 @@
   let notifications = $state<Notification[]>([]);
   let unreadCount = $state(0);
   let open = $state(false);
+  let controlEl = $state<HTMLDivElement>();
 
   async function loadNotifications() {
     const response = await fetch('/api/notifications');
@@ -38,12 +39,19 @@
   onMount(() => {
     void loadNotifications();
     const events = new EventSource('/api/notifications/stream');
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (open && !controlEl?.contains(event.target as Node)) open = false;
+    };
     events.addEventListener('notification', () => void loadNotifications());
-    return () => events.close();
+    document.addEventListener('click', closeOnOutsideClick);
+    return () => {
+      events.close();
+      document.removeEventListener('click', closeOnOutsideClick);
+    };
   });
 </script>
 
-<div class="notification-control">
+<div class="notification-control" bind:this={controlEl}>
   <button type="button" class="notification-button" aria-label={`Notifikasi, ${unreadCount} belum dibaca`} aria-expanded={open} onclick={() => { open = !open; if (open) void loadNotifications(); }}>
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
       <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" />
