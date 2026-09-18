@@ -9,6 +9,7 @@
   import Dashboard from './Dashboard.svelte';
   import Admin from './Admin.svelte';
   import Password from './Password.svelte';
+  import Notifications from './Notifications.svelte';
   import { parseRoute, navigate, getDefaultPathForRole, type Route } from './router';
   import type { User } from '../server/auth';
 
@@ -282,6 +283,9 @@
 
         <!-- Right: User Profile (Avatar & Name) in Navbar -->
         <div class="topbar-right">
+          {#if !currentUser.mustChangePassword}
+            <Notifications />
+          {/if}
           <div class="user-profile topbar-profile">
             <svg class="user-avatar" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
               <circle cx="12" cy="8" r="4" />

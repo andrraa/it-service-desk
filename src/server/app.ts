@@ -32,6 +32,7 @@ import {
 } from './attachments';
 import { MemoryRateLimiter } from './rate-limit';
 import { validateCsrf } from './csrf';
+import { notificationStream, publishNotification } from './notifications';
 
 export function readConfig(env: Record<string, string | undefined>) {
   const databaseUrl = env.DATABASE_URL ?? '';
@@ -77,6 +78,22 @@ class RequestError extends Error {
 }
 
 export const MAX_REQUEST_BODY_SIZE = MAX_FILE_SIZE * MAX_FILES_PER_UPLOAD + 1024 * 1024;
+
+async function createMessageNotification(sql: any, ticketId: string, messageId: string, sender: User) {
+  return sql`
+    INSERT INTO notifications (recipient_id, ticket_id, message_id)
+    SELECT
+      CASE WHEN ${sender.role === 'User'} THEN assignee_id ELSE creator_id END,
+      id,
+      ${messageId}
+    FROM tickets
+    WHERE id = ${ticketId}
+      AND CASE WHEN ${sender.role === 'User'} THEN assignee_id IS NOT NULL ELSE creator_id IS NOT NULL END
+      AND CASE WHEN ${sender.role === 'User'} THEN assignee_id ELSE creator_id END <> ${sender.id}
+    ON CONFLICT (recipient_id, message_id) DO NOTHING
+    RETURNING recipient_id AS "recipientId"
+  `;
+}
 
 export async function handleRequest(request: Request, ctx: AppContext): Promise<Response> {
   try {
@@ -432,6 +449,53 @@ async function routeRequest(request: Request, ctx: AppContext) {
         },
       }, 403);
     }
+  }
+
+  if (pathname === '/api/notifications/stream') {
+    const user = await getAuthUser();
+    if (!user) return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    if (request.method !== 'GET') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET' });
+    return new Response(notificationStream(user.id), {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
+    });
+  }
+
+  if (pathname === '/api/notifications') {
+    const user = await getAuthUser();
+    if (!user) return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    if (request.method !== 'GET') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET' });
+    const rows = await ctx.sql`
+      SELECT n.id, t.ticket_number AS "ticketNumber", t.title AS "ticketTitle",
+        COALESCE(u.full_name, u.username) AS "senderName", n.read_at AS "readAt", n.created_at AS "createdAt"
+      FROM notifications n
+      JOIN messages m ON m.id = n.message_id
+      JOIN users u ON u.id = m.sender_id
+      JOIN tickets t ON t.id = n.ticket_id
+      WHERE n.recipient_id = ${user.id}
+      ORDER BY n.created_at DESC, n.id DESC
+      LIMIT 20
+    `;
+    const counts = await ctx.sql`SELECT COUNT(*)::int AS count FROM notifications WHERE recipient_id = ${user.id} AND read_at IS NULL`;
+    return json({ notifications: rows, unreadCount: counts[0].count });
+  }
+
+  const notificationReadMatch = pathname.match(/^\/api\/notifications\/(\d+)\/read$/);
+  if (notificationReadMatch) {
+    const user = await getAuthUser();
+    if (!user) return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    if (request.method !== 'PATCH') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'PATCH' });
+    const updated = await ctx.sql`
+      UPDATE notifications SET read_at = COALESCE(read_at, NOW())
+      WHERE id = ${notificationReadMatch[1]} AND recipient_id = ${user.id}
+      RETURNING id
+    `;
+    if (!updated.length) return json({ error: { code: 'NOT_FOUND', message: 'Notifikasi tidak ditemukan.' } }, 404);
+    return json({ message: 'Notifikasi ditandai terbaca.' });
   }
 
   // Dashboard IT Summary: GET /api/dashboard/summary
@@ -865,17 +929,19 @@ async function routeRequest(request: Request, ctx: AppContext) {
       const requestId = requestKey((body as Record<string, unknown>).requestId);
 
       try {
-        const inserted = await ctx.sql.begin(async (tx) => {
+        const result = await ctx.sql.begin(async (tx) => {
           await lockActiveTicket(tx, String(ticket.id), user);
-          return tx`
-          INSERT INTO messages (ticket_id, sender_id, message_text, request_id)
-          VALUES (${ticket.id}, ${user.id}, ${messageText}, ${requestId})
-          ON CONFLICT (sender_id, request_id) DO UPDATE SET request_id = EXCLUDED.request_id
-          RETURNING id, ticket_id AS "ticketId", sender_id AS "senderId", message_text AS "messageText", created_at AS "createdAt"
-        `;
-
+          const inserted = await tx`
+            INSERT INTO messages (ticket_id, sender_id, message_text, request_id)
+            VALUES (${ticket.id}, ${user.id}, ${messageText}, ${requestId})
+            ON CONFLICT (sender_id, request_id) DO UPDATE SET request_id = EXCLUDED.request_id
+            RETURNING id, ticket_id AS "ticketId", sender_id AS "senderId", message_text AS "messageText", created_at AS "createdAt"
+          `;
+          const recipients = await createMessageNotification(tx, String(ticket.id), String(inserted[0].id), user);
+          return { inserted, recipients };
         });
-        const newMsg = inserted[0] as TicketMessage;
+        for (const recipient of result.recipients) publishNotification(String(recipient.recipientId));
+        const newMsg = result.inserted[0] as TicketMessage;
         newMsg.senderUsername = user.username;
         newMsg.senderRole = user.role;
 
@@ -944,6 +1010,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
     const savedPaths: string[] = [];
 
     try {
+      let notificationRecipients: Array<{ recipientId: string | number }> = [];
       const insertedRows = await ctx.sql.begin(async (tx) => {
         // ponytail: file writes hold a per-ticket lock; stage outside the lock if upload contention becomes material.
         await lockActiveTicket(tx, String(ticket.id), user);
@@ -966,6 +1033,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
           const messages = await tx`INSERT INTO messages (ticket_id, sender_id, message_text)
             VALUES (${ticket.id}, ${user.id}, ${validation.data.messageText}) RETURNING id`;
           messageId = String(messages[0].id);
+          notificationRecipients = await createMessageNotification(tx, String(ticket.id), messageId, user);
         }
         const rows = [];
         for (const [index, file] of files.entries()) {
@@ -987,6 +1055,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
         }
         return rows;
       });
+      for (const recipient of notificationRecipients) publishNotification(String(recipient.recipientId));
       return json({ message: 'Berkas berhasil diunggah.', attachments: insertedRows }, 201);
     } catch (err) {
       for (const path of savedPaths) {

@@ -95,4 +95,4 @@ Integration test hanya berjalan pada database terpisah berakhiran `_test`.
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-Production menjalankan migrasi otomatis, menyajikan frontend dari `dist/web`, dan menyimpan database serta lampiran pada volume persisten. Gunakan reverse proxy HTTPS dan jangan mengekspos PostgreSQL ke jaringan publik. Prosedur backup, restore, dan monitoring tersedia di [docs/operations.md](docs/operations.md).
+Production tersedia pada port `80`, menjalankan migrasi otomatis, menyajikan frontend dari `dist/web`, dan menyimpan database serta lampiran pada volume persisten. Gunakan reverse proxy HTTPS dan jangan mengekspos PostgreSQL ke jaringan publik. Prosedur backup, restore, dan monitoring tersedia di [docs/operations.md](docs/operations.md).

@@ -6,7 +6,7 @@ services:
     container_name: it-service-desk-prod
     restart: always
     ports:
-      - "3000:3000"
+      - "80:3000"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://it_service_desk:${POSTGRES_PASSWORD:-it_service_desk_prod_pass}@postgres:5432/it_service_desk
