@@ -662,6 +662,7 @@ dialog::backdrop {
 .app-workspace > main#main {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding: 32px;
   width: 100%;
