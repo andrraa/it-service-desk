@@ -816,7 +816,7 @@ dialog::backdrop {
   }
 
   .app-workspace > main#main {
-    padding: 12px;
+    padding: 16px;
   }
 }
 
