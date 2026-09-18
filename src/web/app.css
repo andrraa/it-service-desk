@@ -615,6 +615,16 @@ dialog::backdrop {
   background-color: var(--color-danger-bg);
 }
 
+.sidebar-theme-wrapper {
+  display: flex;
+  width: 100%;
+}
+
+.sidebar-theme-wrapper .theme-toggle {
+  width: 100%;
+  justify-content: center;
+}
+
 /* Workspace Area */
 .app-workspace {
   flex: 1;
@@ -636,6 +646,47 @@ dialog::backdrop {
   justify-content: space-between;
   padding: 0 32px;
   gap: 16px;
+}
+
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.topbar-brand:hover {
+  text-decoration: none;
+}
+
+.brand-mark-logo {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  font-weight: 800;
+  font-size: 0.875rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.05em;
+}
+
+.topbar-separator {
+  color: var(--color-border);
+  user-select: none;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.topbar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .topbar-left {

@@ -155,16 +155,6 @@
       class:drawer-open={isDrawerOpen}
       aria-label="Menu navigasi"
     >
-      <div class="brand-header">
-        <a
-          href={currentUser.mustChangePassword ? '/password' : getDefaultPathForRole(currentUser.role)}
-          class="brand-title"
-          onclick={() => closeDrawer()}
-        >
-          IT Service Desk
-        </a>
-      </div>
-
       <nav class="sidebar-nav" aria-label="Menu utama">
         {#if currentUser.mustChangePassword}
           <a
@@ -227,18 +217,11 @@
       </nav>
 
       <div class="sidebar-user">
-        <div class="user-profile">
-          <svg class="user-avatar" viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 21a8 8 0 0 1 16 0" />
-          </svg>
-          <div class="user-profile-info">
-            <span class="user-display-name" title={currentUser.fullName || currentUser.username}>
-              {currentUser.fullName || currentUser.username}
-            </span>
-            <span class="badge-role badge-neutral">{currentUser.role}</span>
-          </div>
+        <!-- Theme Toggle positioned above Logout -->
+        <div class="sidebar-theme-wrapper">
+          <ThemeToggle />
         </div>
+
         <button type="button" class="btn-logout" onclick={handleLogout}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -269,15 +252,30 @@
             <span>Menu</span>
           </button>
 
+          <!-- Brand Logo in Navbar -->
+          <a
+            href={currentUser.mustChangePassword ? '/password' : getDefaultPathForRole(currentUser.role)}
+            class="topbar-brand"
+            title="Beranda IT Service Desk"
+          >
+            <span class="brand-mark-logo" aria-hidden="true">IT</span>
+            <span class="brand-title">IT Service Desk</span>
+          </a>
+
           {#if currentRoute.view === 'tickets'}
+            <span class="topbar-separator" aria-hidden="true">/</span>
             <span class="topbar-title">Tiket Saya</span>
           {:else if currentRoute.view === 'it-queue'}
+            <span class="topbar-separator" aria-hidden="true">/</span>
             <span class="topbar-title">Antrean IT</span>
           {:else if currentRoute.view === 'admin-users'}
+            <span class="topbar-separator" aria-hidden="true">/</span>
             <span class="topbar-title">Manajemen Staf IT & Pengguna</span>
           {:else if currentRoute.view === 'password'}
+            <span class="topbar-separator" aria-hidden="true">/</span>
             <span class="topbar-title">Ganti Password</span>
           {:else if currentRoute.view === 'tickets-new'}
+            <span class="topbar-separator" aria-hidden="true">/</span>
             <nav aria-label="Breadcrumb">
               <ol class="nav-breadcrumb">
                 <li><a href="/tickets">Tiket Saya</a></li>
@@ -286,6 +284,7 @@
               </ol>
             </nav>
           {:else if currentRoute.view === 'ticket-detail'}
+            <span class="topbar-separator" aria-hidden="true">/</span>
             <nav aria-label="Breadcrumb">
               <ol class="nav-breadcrumb">
                 <li><a href="/tickets">Tiket Saya</a></li>
@@ -296,7 +295,21 @@
           {/if}
         </div>
 
-        <ThemeToggle />
+        <!-- Right: User Profile (Avatar & Name) in Navbar -->
+        <div class="topbar-right">
+          <div class="user-profile topbar-profile">
+            <svg class="user-avatar" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21a8 8 0 0 1 16 0" />
+            </svg>
+            <div class="user-profile-info">
+              <span class="user-display-name" title={currentUser.fullName || currentUser.username}>
+                {currentUser.fullName || currentUser.username}
+              </span>
+              <span class="badge-role badge-neutral">{currentUser.role}</span>
+            </div>
+          </div>
+        </div>
       </header>
 
       <main id="main" tabindex="-1">
