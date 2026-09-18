@@ -276,7 +276,7 @@
           {:else if currentRoute.view === 'tickets-new'}
             <span class="topbar-title">Buat Tiket</span>
           {:else if currentRoute.view === 'ticket-detail'}
-            <span class="topbar-title">Detail Tiket</span>
+            <span class="topbar-title tabular-nums">{currentRoute.ticketNumber}</span>
           {/if}
         </div>
 

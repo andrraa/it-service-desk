@@ -148,14 +148,6 @@
 </script>
 
 <div class="ticket-detail-view">
-  <nav class="content-breadcrumb" aria-label="Breadcrumb">
-    <ol class="nav-breadcrumb">
-      <li><a href={currentUser.role === 'User' ? '/tickets' : '/it/queue'}>{currentUser.role === 'User' ? 'Tiket Saya' : 'Antrean IT'}</a></li>
-      <li aria-hidden="true">/</li>
-      <li aria-current="page"><strong class="tabular-nums">{ticket?.ticketNumber || 'Detail Tiket'}</strong></li>
-    </ol>
-  </nav>
-
   <!-- Top Navigation & Actions -->
   <div class="detail-header-bar">
     <button type="button" class="btn btn-secondary" onclick={onBack}>
