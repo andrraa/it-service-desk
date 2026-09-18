@@ -426,6 +426,15 @@ label {
   background: var(--color-surface-hover);
 }
 
+.unauth-topbar .theme-toggle {
+  width: 44px;
+  padding: 0;
+}
+
+.unauth-topbar .theme-toggle span {
+  display: none;
+}
+
 /* Modals & Dialogs */
 dialog {
   border: 1px solid var(--color-border);
