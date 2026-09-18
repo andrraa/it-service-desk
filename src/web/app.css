@@ -793,6 +793,10 @@ dialog::backdrop {
     font-size: 0;
   }
 
+  .topbar-profile .user-profile-info {
+    display: none;
+  }
+
   .btn-mobile-menu svg,
   .theme-toggle svg {
     width: 20px;
