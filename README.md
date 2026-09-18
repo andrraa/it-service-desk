@@ -1,104 +1,98 @@
-# IT Service Desk — Corporate Internal Workspace
+# IT Service Desk
 
-Aplikasi internal berbasis web untuk pelaporan kendala, manajemen tiket, antrean operasional IT Staff (FIFO per urgensi prioritas), ruang percakapan & lampiran privat, serta pemulihan akses pengguna.
+Aplikasi internal untuk pelaporan dan penanganan kendala IT. Pengguna membuat tiket dan berkomunikasi dengan tim IT; IT Staff menangani antrean; Super Admin mengelola akun dan pemulihan akses.
 
-Spesifikasi Produk: [PRD.md](PRD.md)  
-Panduan Desain: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)  
-Panduan Operasional & Docker: [docs/operations.md](docs/operations.md)  
-Checklist Kesiapan Rilis: [tests/release-checklist.md](tests/release-checklist.md)  
-Laporan Verifikasi E2E: [tests/e2e.md](tests/e2e.md)
+Dokumentasi terkait:
+- [Spesifikasi produk](PRD.md)
+- [Operasional dan deployment](docs/operations.md)
 
----
+## Fitur
 
-## 1. Fitur Utama MVP
+- Registrasi dengan nama lengkap, username, dan password.
+- Sesi aman berbasis cookie, CSRF protection, dan rate limiting.
+- Tiket bernomor otomatis dengan pencarian, filter, dan server-side pagination.
+- Antrean IT berdasarkan prioritas dan FIFO, claim tiket, serta audit perubahan.
+- Percakapan real-time berbasis polling, lampiran privat, dan histori tiket.
+- Penutupan tiket dengan solusi wajib dan status Closed yang read-only.
+- Manajemen pengguna, staf IT, status akun, serta reset password oleh Super Admin.
+- Antarmuka responsif dengan Light Mode dan Dark Mode.
 
-1. **Autentikasi & Registrasi Karyawan:**
-   - Pendaftaran menggunakan NIK (string mempertahankan leading zero) dan username case-insensitive.
-   - Sesi berbasis Cookie `HttpOnly`, `SameSite=Lax`, dan `Secure`.
-   - Proteksi CSRF & Rate Limiting pada auth.
-2. **Manajemen Tiket Milik Pengguna:**
-   - Pembuatan tiket dengan nomor urut unik otomatis (`TKT-000001`).
-   - Pencarian tiket dan pagination.
-   - Hak akses isolasi kepemilikan (User hanya dapat melihat tiket sendiri).
-3. **Dashboard Operasional IT:**
-   - Antrean FIFO per tingkat urgensi (`Critical` → `High` → `Medium` → `Low`) dengan tie-breaker ID stabil.
-   - Pengambilan tiket atomik (*race condition safe*).
-   - Penyesuaian prioritas beralasan wajib dengan audit log lengkap.
-4. **Ruang Percakapan & Lampiran Berkas Privat:**
-   - Percakapan kronologis per tiket dengan auto-polling (4 detik).
-   - Validasi berkas lampiran (JPG, PNG, WebP, PDF) dengan verifikasi magic bytes (max 10 MB).
-   - Download privat terotorisasi (pencegahan path traversal).
-5. **Penyelesaian Solusi & Histori Terkunci:**
-   - Penutupan tiket dengan solusi wajib terdokumentasi (status `Closed`).
-   - Tiket Closed terkunci read-only dari segala bentuk mutasi.
-6. **Administrasi Staf IT & Pemulihan Akun:**
-   - Pembuatan staf IT baru dengan password sementara acak 24 jam dan wajib ganti password.
-   - Pembatasan sesi (*restricted session*) di backend bagi akun yang wajib ganti password.
-   - Proteksi penonaktifan Super Admin aktif terakhir.
-7. **Antarmuka & Tema Visual:**
-   - Gaya corporate, radius 8–12 px, fokus keyboard aksesibel.
-   - Toggle Light Mode dan Dark Mode dengan penyimpanan preferensi di local storage browser.
+## Teknologi
 
----
+- Bun 1.4+
+- Svelte 5, TypeScript, dan Vite
+- PostgreSQL 16
+- Docker dan Docker Compose
+- Argon2id melalui `Bun.password`
 
-## 2. Tech Stack
+## Development dengan Docker
 
-- **Runtime & Backend:** Bun 1.4.2 (HTTP Server bawaan Bun + Bun SQL)
-- **Frontend:** Svelte 5 + TypeScript + Vite
-- **Database:** PostgreSQL 16
-- **Containerization:** Docker & Docker Compose (Multi-stage production & dev setup)
-- **Hashing:** Argon2id (bawaan `Bun.password`)
-
----
-
-## 3. Menjalankan Menggunakan Docker
-
-### A. Lingkungan Development (`docker-dev`)
 ```bash
-# Jalankan container dev (Hot reload aktif pada port 3000 & 5173)
 docker compose -f docker-compose.dev.yml up --build -d
 ```
 
-### B. Lingkungan Production (`docker-production`)
-```bash
-# 1. Jalankan container production (Build multi-stage + migrasi database otomatis di port 3000)
-docker compose -f docker-compose.prod.yml up --build -d
+Layanan development:
+- Web: http://localhost:5173
+- API: http://localhost:3000
+- PostgreSQL: `localhost:5433`
 
-# 2. Bootstrap akun Super Admin pertama:
-docker compose -f docker-compose.prod.yml exec -e ADMIN_NIK="000001" -e ADMIN_USERNAME="superadmin" -e ADMIN_PASSWORD="SuperPasswordAman123!" app bun run scripts/bootstrap-admin.ts
+Perintah umum:
+
+```bash
+docker compose -f docker-compose.dev.yml logs -f app
+docker compose -f docker-compose.dev.yml restart app
+docker compose -f docker-compose.dev.yml down
 ```
 
----
-
-## 4. Menjalankan Secara Lokal (Non-Docker)
+## Development tanpa Docker
 
 ```bash
-# 1. Salin konfigurasi env & jalankan migrasi
 cp .env.example .env
+bun install
 bun run src/server/migrate.ts
-
-# 2. Jalankan Backend & Frontend
-bun run dev:api    # Terminal 1: Backend API (port 3000)
-bun run dev:web    # Terminal 2: Frontend Vite (port 5173)
+bun run dev:all
 ```
 
----
+`DATABASE_URL` wajib menunjuk PostgreSQL aplikasi. `TEST_DATABASE_URL` harus memakai database terpisah dengan nama berakhiran `_test`.
 
-## 5. Pengujian & Verifikasi Kualitas
+## Akun Super Admin Pertama
+
+Jalankan setelah migrasi dengan password kuat milik lingkungan Anda sendiri:
 
 ```bash
-# Jalankan Typecheck TypeScript Strict
-bun run check
-
-# Jalankan Unit Tests
-bun test
-
-# Jalankan Seluruh Integration Tests
-bun test ./tests/*.integration.ts
-
-# Build Bundling Produksi
-bun run build
-
-# Menjalankan Hasil Build Produksi
-bun start
+ADMIN_USERNAME="superadmin" \
+ADMIN_FULL_NAME="Super Administrator" \
+ADMIN_PASSWORD="ganti-dengan-password-kuat" \
+bun run scripts/bootstrap-admin.ts
 ```
+
+Di container production:
+
+```bash
+docker compose -f docker-compose.prod.yml exec \
+  -e ADMIN_USERNAME="superadmin" \
+  -e ADMIN_FULL_NAME="Super Administrator" \
+  -e ADMIN_PASSWORD="ganti-dengan-password-kuat" \
+  app bun run scripts/bootstrap-admin.ts
+```
+
+Bootstrap bersifat idempotent dan tidak menimpa akun yang sudah ada.
+
+## Pengujian
+
+```bash
+bun run check
+bun test
+bun run test:integration
+bun run build
+```
+
+Integration test hanya berjalan pada database terpisah berakhiran `_test`.
+
+## Production
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+Production menjalankan migrasi otomatis, menyajikan frontend dari `dist/web`, dan menyimpan database serta lampiran pada volume persisten. Gunakan reverse proxy HTTPS dan jangan mengekspos PostgreSQL ke jaringan publik. Prosedur backup, restore, dan monitoring tersedia di [docs/operations.md](docs/operations.md).

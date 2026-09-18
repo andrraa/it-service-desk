@@ -95,7 +95,7 @@ Prioritas otomatis ditunda agar MVP tidak bergantung pada aturan deteksi yang be
 
 1. Pengguna membuka website.
 2. Pengguna yang belum memiliki akun memilih **Daftar**.
-3. Pengguna mengisi username, password, dan konfirmasi password.
+3. Pengguna mengisi nama lengkap, username, password, dan konfirmasi password.
 4. Sistem memvalidasi input dan keunikan username.
 5. Akun langsung aktif dengan role User.
 6. Pengguna diarahkan ke halaman login.
@@ -402,15 +402,13 @@ SQL migration tetap dapat digunakan; ketentuan TypeScript berlaku untuk kode apl
 
 | Entitas | Data penting |
 |---|---|
-| User | ID, NIK karyawan, username, password hash, role, status aktif, wajib ganti password |
+| User | ID, nama lengkap, username, password hash, role, status aktif, wajib ganti password |
 | Session | Pengguna, masa berlaku, status pencabutan |
 | Ticket | Nomor unik, pelapor, judul, deskripsi, prioritas, status, penanggung jawab, waktu |
 | Message | Tiket, pengirim, isi, waktu kirim |
 | Attachment | Tiket/pesan terkait, pengunggah, nama asli, lokasi privat, tipe, ukuran |
 | Resolution | Tiket, solusi, penutup, waktu penutupan |
 | Audit Log | Pelaksana, aksi, objek terkait, waktu, perubahan yang relevan |
-
-NIK pada entitas User adalah **Nomor Induk Karyawan**, bukan Nomor Induk Kependudukan. Kolom `nik` disimpan sebagai string agar angka nol di awal tetap dipertahankan.
 
 Ini merupakan model konseptual, bukan kewajiban membuat satu tabel untuk setiap entitas.
 

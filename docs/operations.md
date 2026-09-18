@@ -46,7 +46,11 @@ Fitur:
 docker compose -f docker-compose.prod.yml up --build -d
 
 # 2. Bootstrap akun Super Admin pertama di dalam container production:
-docker compose -f docker-compose.prod.yml exec -e ADMIN_NIK="000001" -e ADMIN_USERNAME="superadmin" -e ADMIN_PASSWORD="SuperPasswordAman123!" app bun run scripts/bootstrap-admin.ts
+docker compose -f docker-compose.prod.yml exec \
+  -e ADMIN_USERNAME="superadmin" \
+  -e ADMIN_FULL_NAME="Super Administrator" \
+  -e ADMIN_PASSWORD="ganti-dengan-password-kuat" \
+  app bun run scripts/bootstrap-admin.ts
 
 # 3. Memeriksa status service
 docker compose -f docker-compose.prod.yml ps
