@@ -147,10 +147,10 @@
   <div class="page-heading">
     <div>
       <p class="eyebrow">PANEL SUPER ADMIN</p>
-      <h1>Manajemen Pengguna & Staf IT</h1>
-      <p class="page-description">Kelola tim teknisi IT, buat kredensial baru, dan atur status akses operasional.</p>
+      <h1>Manajemen Pengguna</h1>
+      <p class="page-description">Kelola akun pengguna dan staf IT.</p>
     </div>
-    <button type="button" class="btn btn-primary" onclick={() => { showCreateModal = true; createdTempPassword = ''; createError = ''; }}>
+    <button type="button" class="btn btn-primary btn-add-staff" onclick={() => { showCreateModal = true; createdTempPassword = ''; createError = ''; }}>
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
       </svg>
@@ -397,6 +397,11 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
+  }
+
+  .btn-add-staff {
+    margin-top: 16px;
+    margin-bottom: 8px;
   }
 
   .table-card {
