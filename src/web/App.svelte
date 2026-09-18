@@ -304,6 +304,7 @@
       </header>
 
       <main id="main" tabindex="-1">
+        {#key currentRoute.view === 'ticket-detail' ? currentRoute.ticketNumber : currentRoute.view}
         {#if currentRoute.view === 'password'}
           <Password
             {currentUser}
@@ -341,6 +342,7 @@
             onBack={() => navigate(currentUser?.role === 'User' ? '/tickets' : '/it/queue')}
           />
         {/if}
+        {/key}
       </main>
     </div>
   </div>
