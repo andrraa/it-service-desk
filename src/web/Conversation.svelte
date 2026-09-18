@@ -3,6 +3,7 @@
   import Attachments from './Attachments.svelte';
   import type { TicketMessage } from '../server/messages';
   import type { User } from '../server/auth';
+  import { randomId } from './id';
 
   interface Props {
     ticketId: string;
@@ -23,7 +24,7 @@
   let messageListEl = $state<HTMLDivElement>();
   let composerEl = $state<HTMLTextAreaElement>();
 
-  let requestId = crypto.randomUUID();
+  let requestId = randomId();
   let hasOlder = $state(false);
   let isFetching = $state(false);
   let remotelyClosed = $state(false);
@@ -120,7 +121,7 @@
       deliveryUncertain = false;
       newMessage = '';
       selectedFiles = [];
-      requestId = crypto.randomUUID();
+      requestId = randomId();
       await fetchMessages();
       sentSuccessfully = true;
     } catch {

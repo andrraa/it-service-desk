@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import type { TicketPriority, Ticket } from '../server/tickets';
+  import { randomId } from './id';
 
   interface Props {
     onCreated?: (ticket: Ticket) => void;
@@ -29,8 +30,8 @@
   let isDragging = $state(false);
   let fileInputEl = $state<HTMLInputElement | null>(null);
 
-  const requestId = crypto.randomUUID();
-  const uploadId = crypto.randomUUID();
+  const requestId = randomId();
+  const uploadId = randomId();
 
   const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -71,7 +72,7 @@
       }
 
       newItems.push({
-        id: crypto.randomUUID(),
+        id: randomId(),
         file,
         previewUrl,
       });
