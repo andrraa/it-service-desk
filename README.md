@@ -3,7 +3,7 @@
 Aplikasi internal untuk pelaporan dan penanganan kendala IT. Pengguna membuat tiket dan berkomunikasi dengan tim IT; IT Staff menangani antrean; Super Admin mengelola akun dan pemulihan akses.
 
 Dokumentasi terkait:
-- [Spesifikasi produk](PRD.md)
+- [Spesifikasi produk](docs/prd.md)
 - [Operasional dan deployment](docs/operations.md)
 
 ## Fitur
