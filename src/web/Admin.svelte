@@ -221,12 +221,12 @@
       <table class="admin-table">
         <thead>
           <tr>
-            <th>Nama Lengkap</th>
+            <th>Nama</th>
             <th>Username</th>
             <th>Role</th>
-            <th>Status Akun</th>
-            <th>Wajib Ganti Password</th>
-            <th>Waktu Bergabung</th>
+            <th>Status</th>
+            <th>Ganti Password</th>
+            <th>Bergabung</th>
             <th>Aksi</th>
           </tr>
         </thead>

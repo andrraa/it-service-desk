@@ -209,11 +209,11 @@
         <table class="tickets-table">
           <thead>
             <tr>
-              <th scope="col">Nomor & Judul</th>
+              <th scope="col">Tiket</th>
               <th scope="col">Prioritas</th>
               <th scope="col">Status</th>
               <th scope="col">PIC</th>
-              <th scope="col">Waktu Dibuat</th>
+              <th scope="col">Dibuat</th>
               <th scope="col">Aksi</th>
             </tr>
           </thead>
