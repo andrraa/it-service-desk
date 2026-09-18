@@ -1,11 +1,11 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from '../src/server/app';
+import { handleRequest } from '../src/server/app';
+import { openTestDatabase, closeTestDatabase } from './database';
 import { hashPassword } from '../src/server/auth';
 
 describe('Tickets Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
   const authHeaders = {
     'Content-Type': 'application/json',
     'X-Requested-With': 'fetch',
@@ -16,7 +16,7 @@ describe('Tickets Integration Tests (Live PostgreSQL)', () => {
   let itStaffSession: string;
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
 
     // Clean previous test data
     await sql`DELETE FROM tickets WHERE title LIKE 'TEST_TKT_%'`;
@@ -58,7 +58,7 @@ describe('Tickets Integration Tests (Live PostgreSQL)', () => {
   afterAll(async () => {
     await sql`DELETE FROM tickets WHERE title LIKE 'TEST_TKT_%'`;
     await sql`DELETE FROM users WHERE username LIKE 'tkt_test_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: creates tickets with sequential unique numbers and status Open', async () => {

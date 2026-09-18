@@ -1,11 +1,11 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from '../src/server/app';
+import { handleRequest } from '../src/server/app';
+import { openTestDatabase, closeTestDatabase } from './database';
 import { hashPassword } from '../src/server/auth';
 
 describe('Messages & Conversation Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
   const authHeaders = {
     'Content-Type': 'application/json',
     'X-Requested-With': 'fetch',
@@ -17,7 +17,7 @@ describe('Messages & Conversation Integration Tests (Live PostgreSQL)', () => {
   let itStaffSession: string;
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
 
     // Cleanup
     await sql`DELETE FROM messages WHERE message_text LIKE 'TEST_MSG_%'`;
@@ -59,7 +59,7 @@ describe('Messages & Conversation Integration Tests (Live PostgreSQL)', () => {
     await sql`DELETE FROM messages WHERE message_text LIKE 'TEST_MSG_%'`;
     await sql`DELETE FROM tickets WHERE title LIKE 'MSG_TKT_%'`;
     await sql`DELETE FROM users WHERE username LIKE 'msg_test_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: sending and retrieving messages in chronological order', async () => {

@@ -1,5 +1,6 @@
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from './app';
+import { join } from 'node:path';
+import { handleRequest, readConfig, MAX_REQUEST_BODY_SIZE } from './app';
 
 const config = readConfig(process.env);
 // https://bun.com/docs/runtime/sql#connection-pooling
@@ -9,8 +10,27 @@ const db = new SQL(config.databaseUrl, { max: 5, connectionTimeout: 2, idleTimeo
 const server = Bun.serve({
   hostname: process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '0.0.0.0'),
   port: config.port,
-  maxRequestBodySize: 64 * 1024,
-  fetch: (request) => handleRequest(request, { sql: db }),
+  maxRequestBodySize: MAX_REQUEST_BODY_SIZE,
+  fetch: async (request, server) => {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith('/api')) {
+      return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' });
+    }
+
+    const distWeb = join(import.meta.dir, '../../dist/web');
+    const requestedPath = join(distWeb, url.pathname);
+    const file = Bun.file(requestedPath);
+    if (await file.exists() && (await file.stat())?.isFile()) {
+      return new Response(file);
+    }
+
+    const indexHtml = Bun.file(join(distWeb, 'index.html'));
+    if (await indexHtml.exists()) {
+      return new Response(indexHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    }
+
+    return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' });
+  },
 });
 console.info(`IT Service Desk API: ${server.url}`);
 

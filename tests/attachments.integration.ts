@@ -1,12 +1,12 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from '../src/server/app';
+import { handleRequest } from '../src/server/app';
+import { openTestDatabase, closeTestDatabase } from './database';
 import { hashPassword } from '../src/server/auth';
 import { safeDeleteFile } from '../src/server/attachments';
 
 describe('Private Attachments Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
   const authHeaders = {
     'X-Requested-With': 'fetch',
   };
@@ -37,7 +37,7 @@ describe('Private Attachments Integration Tests (Live PostgreSQL)', () => {
   }
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
 
     // Clean previous test data
     await sql`DELETE FROM attachments WHERE original_name LIKE 'test_%' OR original_name LIKE 'doc_%'`;
@@ -92,7 +92,7 @@ describe('Private Attachments Integration Tests (Live PostgreSQL)', () => {
     await sql`DELETE FROM attachments WHERE ticket_id = ${ticketAId}`;
     await sql`DELETE FROM tickets WHERE title LIKE 'ATT_TKT_%'`;
     await sql`DELETE FROM users WHERE username LIKE 'att_test_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: uploads valid PNG and PDF attachments with randomized storage names', async () => {

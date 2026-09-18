@@ -3,6 +3,7 @@
 Aplikasi internal berbasis web untuk pelaporan kendala, manajemen tiket, antrean operasional IT Staff (FIFO per urgensi prioritas), ruang percakapan & lampiran privat, serta pemulihan akses pengguna.
 
 Spesifikasi Produk: [PRD.md](PRD.md)  
+Panduan Desain: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)  
 Panduan Operasional & Docker: [docs/operations.md](docs/operations.md)  
 Checklist Kesiapan Rilis: [tests/release-checklist.md](tests/release-checklist.md)  
 Laporan Verifikasi E2E: [tests/e2e.md](tests/e2e.md)
@@ -92,7 +93,7 @@ bun run check
 # Jalankan Unit Tests
 bun test
 
-# Jalankan Seluruh Integration Tests (Database Nyata)
+# Jalankan Seluruh Integration Tests
 bun test ./tests/*.integration.ts
 
 # Build Bundling Produksi

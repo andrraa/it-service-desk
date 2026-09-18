@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { navigate } from './router';
+
   interface Props {
     onSuccess?: () => void;
-    onSwitchToLogin?: () => void;
   }
 
-  let { onSuccess, onSwitchToLogin }: Props = $props();
+  let { onSuccess }: Props = $props();
 
   let nik = $state('');
   let username = $state('');
@@ -51,7 +52,10 @@
       username = '';
       password = '';
       confirmPassword = '';
-      onSuccess?.();
+      setTimeout(() => {
+        onSuccess?.();
+        navigate('/login');
+      }, 1200);
     } catch {
       generalError = 'Terjadi gangguan jaringan saat menghubungi server.';
     } finally {
@@ -62,9 +66,8 @@
 
 <div class="auth-card">
   <div class="auth-header">
-    <p class="eyebrow">REGISTRASI AKUN</p>
-    <h2>Daftar Pengguna Baru</h2>
-    <p class="auth-subtitle">Daftarkan NIK dan buat kredensial untuk mengakses layanan IT Service Desk.</p>
+    <h1>Daftar Akun</h1>
+    <p class="auth-subtitle">Daftarkan Nomor Induk Karyawan dan buat kredensial akun baru.</p>
   </div>
 
   {#if generalError}
@@ -87,7 +90,7 @@
 
   <form onsubmit={handleSubmit} novalidate class="auth-form">
     <div class="form-group">
-      <label for="nik">NIK (Nomor Induk Karyawan)</label>
+      <label for="nik">Nomor Induk Karyawan</label>
       <input
         id="nik"
         type="text"
@@ -96,11 +99,14 @@
         required
         disabled={isSubmitting}
         class:input-error={Boolean(errors.nik)}
+        aria-invalid={Boolean(errors.nik)}
+        aria-describedby={errors.nik ? 'nik-error' : 'nik-hint'}
       />
       {#if errors.nik}
-        <span class="field-error">{errors.nik}</span>
+        <span id="nik-error" class="field-error">{errors.nik}</span>
+      {:else}
+        <span id="nik-hint" class="field-hint">Angka nol di awal akan tetap tersimpan sesuai format resmi.</span>
       {/if}
-      <span class="field-hint">Angka nol di awal akan tetap tersimpan sesuai format resmi.</span>
     </div>
 
     <div class="form-group">
@@ -113,9 +119,11 @@
         required
         disabled={isSubmitting}
         class:input-error={Boolean(errors.username)}
+        aria-invalid={Boolean(errors.username)}
+        aria-describedby={errors.username ? 'username-error' : undefined}
       />
       {#if errors.username}
-        <span class="field-error">{errors.username}</span>
+        <span id="username-error" class="field-error">{errors.username}</span>
       {/if}
     </div>
 
@@ -129,9 +137,13 @@
         required
         disabled={isSubmitting}
         class:input-error={Boolean(errors.password)}
+        aria-invalid={Boolean(errors.password)}
+        aria-describedby={errors.password ? 'password-error' : 'password-hint'}
       />
       {#if errors.password}
-        <span class="field-error">{errors.password}</span>
+        <span id="password-error" class="field-error">{errors.password}</span>
+      {:else}
+        <span id="password-hint" class="field-hint">Minimal 12 karakter untuk keamanan akun.</span>
       {/if}
     </div>
 
@@ -145,22 +157,24 @@
         required
         disabled={isSubmitting}
         class:input-error={Boolean(errors.confirmPassword)}
+        aria-invalid={Boolean(errors.confirmPassword)}
+        aria-describedby={errors.confirmPassword ? 'confirm-error' : undefined}
       />
       {#if errors.confirmPassword}
-        <span class="field-error">{errors.confirmPassword}</span>
+        <span id="confirm-error" class="field-error">{errors.confirmPassword}</span>
       {/if}
     </div>
 
-    <button type="submit" class="btn btn-primary" disabled={isSubmitting}>
-      {isSubmitting ? 'Memproses pendaftaran…' : 'Daftar Sekarang'}
+    <button type="submit" class="btn btn-primary" style="width: 100%;" disabled={isSubmitting}>
+      {isSubmitting ? 'Mendaftarkan…' : 'Daftar Sekarang'}
     </button>
   </form>
 
   <div class="auth-footer">
     <span>Sudah memiliki akun?</span>
-    <button type="button" class="btn-link" onclick={onSwitchToLogin}>
-      Masuk ke Workspace
-    </button>
+    <a href="/login" class="btn-link" onclick={(e) => { e.preventDefault(); navigate('/login'); }}>
+      Masuk ke Akun
+    </a>
   </div>
 </div>
 
@@ -169,19 +183,20 @@
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: 28px;
-    max-width: 460px;
-    margin: 0 auto 32px;
+    padding: 32px;
+    width: 100%;
+    max-width: 440px;
+    margin: 0 auto;
   }
 
   .auth-header {
-    margin-bottom: 20px;
+    margin-bottom: 24px;
   }
 
   .auth-subtitle {
     font-size: 0.875rem;
     color: var(--color-text-muted);
-    margin-top: 4px;
+    margin-top: 6px;
   }
 
   .auth-form {
@@ -190,114 +205,15 @@
     gap: 16px;
   }
 
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  label {
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  input {
-    padding: 10px 14px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    font-size: 0.9rem;
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-
-  input:focus {
-    border-color: var(--color-primary);
-  }
-
-  input.input-error {
-    border-color: var(--color-danger);
-  }
-
-  .field-error {
-    font-size: 0.775rem;
-    color: var(--color-danger);
-  }
-
-  .field-hint {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-  }
-
-  .btn {
-    padding: 10px 16px;
-    border-radius: var(--radius-sm);
-    font-weight: 600;
-    font-size: 0.9rem;
-    cursor: pointer;
-    border: none;
-    transition: background-color 0.15s;
-  }
-
-  .btn-primary {
-    background-color: var(--color-primary);
-    color: var(--color-primary-text);
-    margin-top: 8px;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background-color: var(--color-primary-hover);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
   .auth-footer {
-    margin-top: 20px;
+    margin-top: 24px;
     padding-top: 16px;
     border-top: 1px solid var(--color-border);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--color-text-muted);
-  }
-
-  .btn-link {
-    background: none;
-    border: none;
-    color: var(--color-primary);
-    font-weight: 600;
-    cursor: pointer;
-    padding: 0;
-  }
-
-  .btn-link:hover {
-    text-decoration: underline;
-  }
-
-  .alert {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 0.85rem;
-    margin-bottom: 16px;
-  }
-
-  .alert-error {
-    background-color: rgba(220, 38, 38, 0.1);
-    color: var(--color-danger);
-    border: 1px solid rgba(220, 38, 38, 0.2);
-  }
-
-  .alert-success {
-    background-color: rgba(22, 163, 74, 0.1);
-    color: var(--color-success);
-    border: 1px solid rgba(22, 163, 74, 0.2);
   }
 </style>

@@ -1,11 +1,11 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from '../src/server/app';
+import { handleRequest } from '../src/server/app';
+import { openTestDatabase, closeTestDatabase } from './database';
 import { hashPassword } from '../src/server/auth';
 
 describe('Ticket Resolution & Closed History Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
   const authHeaders = {
     'Content-Type': 'application/json',
     'X-Requested-With': 'fetch',
@@ -19,7 +19,7 @@ describe('Ticket Resolution & Closed History Integration Tests (Live PostgreSQL)
   let adminSession: string;
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
 
     // Clean previous test data
     await sql`DELETE FROM resolutions WHERE solution LIKE 'TEST_SOL_%'`;
@@ -73,7 +73,7 @@ describe('Ticket Resolution & Closed History Integration Tests (Live PostgreSQL)
     await sql`DELETE FROM audit_logs WHERE reason LIKE 'TEST_SOL_%'`;
     await sql`DELETE FROM tickets WHERE title LIKE 'RES_TKT_%'`;
     await sql`DELETE FROM users WHERE username LIKE 'res_test_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: closing ticket requires mandatory solution (min 10 chars)', async () => {

@@ -87,6 +87,15 @@ export async function ensureUploadsDirExists(): Promise<string> {
   return dir;
 }
 
+export function validateAttachment(file: File, detectedMime?: string): string | null {
+  if (!file.size || file.size > MAX_FILE_SIZE) return 'Berkas harus berisi data dan maksimal 10 MB.';
+  const extensions: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf' };
+  const type = extensions[file.name.split('.').pop()?.toLowerCase() ?? ''];
+  if (!type || file.name.length > 255 || file.name.includes('/') || file.name.includes('\\')) return 'Nama atau ekstensi berkas tidak valid.';
+  if ((file.type && file.type !== type) || (detectedMime && detectedMime !== type)) return 'Ekstensi dan tipe berkas tidak sesuai.';
+  return null;
+}
+
 export function generateStorageFilename(originalName: string): string {
   const randomBytes = new Uint8Array(16);
   crypto.getRandomValues(randomBytes);
@@ -100,7 +109,7 @@ export function generateStorageFilename(originalName: string): string {
 export async function safeDeleteFile(filePath: string): Promise<void> {
   try {
     await unlink(filePath);
-  } catch {
-    // Ignore if file doesn't exist
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.error('Upload cleanup deferred: file could not be removed.');
   }
 }

@@ -1,25 +1,25 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from '../src/server/app';
+import { handleRequest } from '../src/server/app';
+import { openTestDatabase, closeTestDatabase } from './database';
 import { hashPassword, parseCookies } from '../src/server/auth';
 import { MemoryRateLimiter } from '../src/server/rate-limit';
 
 describe('Auth & Session Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
   const authHeaders = {
     'Content-Type': 'application/json',
     'X-Requested-With': 'fetch',
   };
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
     await sql`DELETE FROM users WHERE username LIKE 'task4_%' OR nik LIKE 'T4_%'`;
   });
 
   afterAll(async () => {
     await sql`DELETE FROM users WHERE username LIKE 'task4_%' OR nik LIKE 'T4_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: rejects mutating requests with invalid CSRF headers', async () => {

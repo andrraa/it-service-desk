@@ -15,6 +15,8 @@ export class MemoryRateLimiter {
 
   isAllowed(key: string): { allowed: boolean; remaining: number; retryAfterSeconds: number } {
     const now = Date.now();
+    // ponytail: process-local limiter; use shared storage if deploying multiple API instances.
+    for (const [oldKey, value] of this.map) if (value.resetAt <= now) this.map.delete(oldKey);
     const entry = this.map.get(key);
 
     if (!entry || now > entry.resetAt) {

@@ -1,20 +1,24 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest, readConfig } from '../src/server/app';
+import { handleRequest as route, type AppContext } from '../src/server/app';
+import { MemoryRateLimiter } from '../src/server/rate-limit';
+import { openTestDatabase, closeTestDatabase } from './database';
 
 describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  const config = readConfig(process.env);
+  // These cases test database uniqueness; limiter boundaries have separate regression coverage.
+  const rateLimiter = new MemoryRateLimiter(100, 60000);
+  const handleRequest = (request: Request, context: AppContext) => route(request, { ...context, rateLimiter });
 
   beforeAll(async () => {
-    sql = new SQL(config.databaseUrl);
+    sql = await openTestDatabase();
     // Clean up test users
     await sql`DELETE FROM users WHERE username LIKE 'test_user_%' OR nik LIKE 'TEST_%'`;
   });
 
   afterAll(async () => {
     await sql`DELETE FROM users WHERE username LIKE 'test_user_%' OR nik LIKE 'TEST_%'`;
-    await sql.close();
+    await closeTestDatabase(sql);
   });
 
   test('acceptance: preserves leading zero in NIK string', async () => {

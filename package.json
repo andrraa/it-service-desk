@@ -5,15 +5,16 @@
   "type": "module",
   "packageManager": "bun@1.4.2",
   "engines": {
-    "bun": ">=1.4.2"
+    "bun": ">=1.4.0"
   },
   "scripts": {
     "dev": "vite",
     "dev:all": "bun run dev:api & bun run dev:web",
     "dev:api": "bun --watch src/server/index.ts",
     "dev:web": "vite --host",
-    "check": "tsc --noEmit",
-    "test": "bun test",
+    "check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json",
+    "test": "bun test tests/*.test.ts",
+    "test:integration": "bun scripts/test-integration.ts",
     "build:web": "vite build",
     "build:server": "bun build --target=bun --outdir=dist/server src/server/index.ts",
     "build": "vite build && bun build --target=bun --outdir=dist/server src/server/index.ts",

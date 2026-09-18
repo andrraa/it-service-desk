@@ -1,29 +1,42 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { navigate } from './router';
   import type { Ticket } from '../server/tickets';
 
   interface Props {
     onSelectTicket?: (ticket: Ticket) => void;
     onCreateNewTicket?: () => void;
+    canViewAll?: boolean;
   }
 
-  let { onSelectTicket, onCreateNewTicket }: Props = $props();
+  let { onSelectTicket, onCreateNewTicket, canViewAll = false }: Props = $props();
 
   let tickets = $state<Ticket[]>([]);
   let searchQuery = $state('');
+  let statusFilter = $state('');
+  let priorityFilter = $state('');
+  let allTickets = $state(false);
+  let generation = 0;
   let page = $state(1);
   let totalPages = $state(1);
   let totalTickets = $state(0);
+  let initialLoaded = $state(false);
   let isLoading = $state(true);
   let errorMessage = $state('');
 
+  const hasActiveFilter = $derived(Boolean(searchQuery.trim() || statusFilter || priorityFilter || allTickets));
+
   async function fetchTickets(targetPage = page, query = searchQuery) {
+    const currentGeneration = ++generation;
     isLoading = true;
     errorMessage = '';
     try {
       const url = new URL('/api/tickets', window.location.origin);
       url.searchParams.set('page', String(targetPage));
       url.searchParams.set('limit', '10');
+      if (statusFilter) url.searchParams.set('status', statusFilter);
+      if (priorityFilter) url.searchParams.set('priority', priorityFilter);
+      if (!allTickets) url.searchParams.set('mine', 'true');
       if (query.trim()) {
         url.searchParams.set('q', query.trim());
       }
@@ -31,6 +44,7 @@
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error('Gagal mengambil daftar tiket.');
       const data: any = await res.json();
+      if (currentGeneration !== generation) return;
       tickets = data.tickets || [];
       if (data.pagination) {
         page = data.pagination.page;
@@ -38,9 +52,12 @@
         totalTickets = data.pagination.total;
       }
     } catch {
-      errorMessage = 'Tidak dapat memuat tiket. Periksa koneksi ke server.';
+      if (currentGeneration === generation) errorMessage = 'Tidak dapat memuat tiket. Periksa koneksi ke server.';
     } finally {
-      isLoading = false;
+      if (currentGeneration === generation) {
+        isLoading = false;
+        initialLoaded = true;
+      }
     }
   }
 
@@ -50,10 +67,37 @@
     void fetchTickets(1, searchQuery);
   }
 
+  function resetFilters() {
+    searchQuery = '';
+    statusFilter = '';
+    priorityFilter = '';
+    allTickets = false;
+    page = 1;
+    void fetchTickets(1, '');
+  }
+
   function handlePageChange(newPage: number) {
     if (newPage < 1 || newPage > totalPages) return;
     page = newPage;
     void fetchTickets(newPage, searchQuery);
+  }
+
+  function handleOpenTicket(e: MouseEvent, ticket: Ticket) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (onSelectTicket) {
+      onSelectTicket(ticket);
+    } else {
+      navigate(`/tickets/${ticket.ticketNumber}`);
+    }
+  }
+
+  function handleCreateClick() {
+    if (onCreateNewTicket) {
+      onCreateNewTicket();
+    } else {
+      navigate('/tickets/new');
+    }
   }
 
   onMount(() => {
@@ -61,216 +105,315 @@
   });
 </script>
 
-<div class="tickets-container">
-  <div class="tickets-header">
-    <div>
-      <p class="eyebrow">DAFTAR KENDALA</p>
-      <h2>Tiket Saya</h2>
-      <p class="section-desc">Pantau progres laporan tiket kendala yang telah Anda buat.</p>
-    </div>
-    <button type="button" class="btn btn-primary" onclick={onCreateNewTicket}>
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-      </svg>
-      Buat Tiket Baru
-    </button>
-  </div>
-
-  <form onsubmit={handleSearch} class="search-bar-form">
-    <div class="search-input-wrap">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-      <input
-        type="search"
-        bind:value={searchQuery}
-        placeholder="Cari nomor tiket, judul, atau deskripsi…"
-      />
-    </div>
-    <button type="submit" class="btn btn-secondary">Cari</button>
-    {#if searchQuery}
-      <button type="button" class="btn btn-secondary" onclick={() => { searchQuery = ''; void fetchTickets(1, ''); }}>
-        Reset
-      </button>
-    {/if}
-  </form>
-
-  {#if errorMessage}
-    <div class="alert alert-error" role="alert">
-      <span>{errorMessage}</span>
-      <button type="button" class="btn-retry" onclick={() => fetchTickets()}>Coba lagi</button>
-    </div>
-  {/if}
-
-  {#if isLoading}
-    <div class="loading-state">
-      <p>Memuat daftar tiket…</p>
-    </div>
-  {:else if tickets.length === 0}
-    <div class="empty-state">
-      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
-      </svg>
-      <h3>Belum Ada Tiket</h3>
-      <p>{searchQuery ? 'Tidak ada tiket yang cocok dengan kata kunci pencarian.' : 'Anda belum membuat tiket kendala.'}</p>
-      {#if !searchQuery}
-        <button type="button" class="btn btn-primary" onclick={onCreateNewTicket} style="margin-top: 12px;">
-          Buat Tiket Pertama
+<div class="tickets-view">
+  {#if initialLoaded && totalTickets === 0 && !hasActiveFilter}
+    <!-- Truly Empty State: Only Title and Single CTA, No Search or Filter -->
+    <div class="empty-state-container">
+      <div class="page-header">
+        <h1>Tiket Saya</h1>
+      </div>
+      <div class="empty-state">
+        <p class="empty-state-title">Belum ada tiket.</p>
+        <p class="empty-state-desc">Anda belum memiliki tiket kendala yang dilaporkan.</p>
+        <button type="button" class="btn btn-primary" onclick={handleCreateClick}>
+          Buat Tiket
         </button>
-      {/if}
+      </div>
     </div>
   {:else}
-    <div class="table-card">
-      <table class="tickets-table">
-        <thead>
-          <tr>
-            <th>Nomor</th>
-            <th>Judul Kendala</th>
-            <th>Prioritas</th>
-            <th>Status</th>
-            <th>Penanggung Jawab</th>
-            <th>Waktu Dibuat</th>
-            <th>Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each tickets as ticket}
-            <tr onclick={() => onSelectTicket?.(ticket)}>
-              <td class="cell-number"><strong>{ticket.ticketNumber}</strong></td>
-              <td class="cell-title">
-                <span class="ticket-title-text">{ticket.title}</span>
-              </td>
-              <td>
-                <span class="badge-priority priority-{ticket.priority.toLowerCase()}">
-                  {ticket.priority}
-                </span>
-              </td>
-              <td>
-                <span class="badge-status status-{ticket.status.toLowerCase().replace(' ', '-')}">
-                  {ticket.status}
-                </span>
-              </td>
-              <td>{ticket.assigneeUsername || 'Belum diambil'}</td>
-              <td class="cell-time">{new Date(ticket.createdAt).toLocaleString('id-ID')}</td>
-              <td>
-                <button type="button" class="btn-detail" onclick={(e) => { e.stopPropagation(); onSelectTicket?.(ticket); }}>
-                  Lihat
-                </button>
-              </td>
+    <!-- Header with single CTA -->
+    <div class="page-header">
+      <h1>{allTickets ? 'Semua Tiket' : 'Tiket Saya'}</h1>
+      <button type="button" class="btn btn-primary" onclick={handleCreateClick}>
+        Buat Tiket
+      </button>
+    </div>
+
+    <!-- Search & Filter Toolbar -->
+    <div class="toolbar">
+      <form onsubmit={handleSearch} class="search-form">
+        <div class="search-input-wrapper">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="search"
+            aria-label="Cari tiket"
+            bind:value={searchQuery}
+            placeholder="Cari nomor, judul, atau deskripsi…"
+          />
+        </div>
+        <button type="submit" class="btn btn-secondary">Cari</button>
+      </form>
+
+      <div class="filter-controls">
+        <div class="filter-item">
+          <label for="filter-status" class="sr-only">Filter Status</label>
+          <select id="filter-status" bind:value={statusFilter} onchange={() => fetchTickets(1)}>
+            <option value="">Semua Status</option>
+            <option value="Open">Open</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Closed">Closed</option>
+          </select>
+        </div>
+
+        <div class="filter-item">
+          <label for="filter-priority" class="sr-only">Filter Prioritas</label>
+          <select id="filter-priority" bind:value={priorityFilter} onchange={() => fetchTickets(1)}>
+            <option value="">Semua Prioritas</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </div>
+
+        {#if canViewAll}
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={allTickets} onchange={() => fetchTickets(1)} />
+            <span>Semua tiket</span>
+          </label>
+        {/if}
+
+        {#if hasActiveFilter}
+          <button type="button" class="btn btn-secondary" onclick={resetFilters}>
+            Reset Filter
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    {#if errorMessage}
+      <div class="alert alert-error" role="alert">
+        <span>{errorMessage}</span>
+        <button type="button" class="btn-link" onclick={() => fetchTickets()}>Coba lagi</button>
+      </div>
+    {/if}
+
+    {#if isLoading}
+      <div class="loading-state">
+        <p>Memuat daftar tiket…</p>
+      </div>
+    {:else if tickets.length === 0}
+      <!-- Empty Search Results -->
+      <div class="empty-state">
+        <p class="empty-state-title">Tidak ada tiket sesuai pencarian.</p>
+        <p class="empty-state-desc">Coba sesuaikan kata kunci atau atur ulang filter pencarian.</p>
+        <button type="button" class="btn btn-secondary" onclick={resetFilters}>
+          Reset Filter
+        </button>
+      </div>
+    {:else}
+      <!-- Desktop Table (≥768px) -->
+      <div class="table-container desktop-only">
+        <table class="tickets-table">
+          <thead>
+            <tr>
+              <th scope="col">Nomor & Judul</th>
+              <th scope="col">Prioritas</th>
+              <th scope="col">Status</th>
+              <th scope="col">PIC</th>
+              <th scope="col">Waktu Dibuat</th>
+              <th scope="col">Aksi</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {#each tickets as ticket}
+              <tr>
+                <td class="cell-primary">
+                  <span class="ticket-number tabular-nums">{ticket.ticketNumber}</span>
+                  <a
+                    href={`/tickets/${ticket.ticketNumber}`}
+                    class="ticket-title"
+                    onclick={(e) => handleOpenTicket(e, ticket)}
+                  >
+                    {ticket.title}
+                  </a>
+                </td>
+                <td>
+                  <span class="badge-priority priority-{ticket.priority.toLowerCase()}">
+                    {ticket.priority}
+                  </span>
+                </td>
+                <td>
+                  <span class="badge-status status-{ticket.status.toLowerCase().replace(' ', '-')}">
+                    {ticket.status}
+                  </span>
+                </td>
+                <td class="cell-muted">
+                  {ticket.assigneeUsername || 'Belum diambil'}
+                </td>
+                <td class="cell-muted tabular-nums">
+                  {new Date(ticket.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                </td>
+                <td>
+                  <a href={`/tickets/${ticket.ticketNumber}`} class="btn btn-secondary btn-sm detail-link">
+                    Lihat Detail
+                  </a>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile Cards (<768px) -->
+      <div class="mobile-only ticket-cards-list">
+        {#each tickets as ticket}
+          <article class="ticket-card">
+            <div class="card-header-row">
+              <span class="ticket-number tabular-nums">{ticket.ticketNumber}</span>
+              <div class="badge-group">
+                <span class="badge-priority priority-{ticket.priority.toLowerCase()}">{ticket.priority}</span>
+                <span class="badge-status status-{ticket.status.toLowerCase().replace(' ', '-')}">{ticket.status}</span>
+              </div>
+            </div>
+            <h2 class="card-title">
+              <a
+                href={`/tickets/${ticket.ticketNumber}`}
+                class="ticket-title"
+                onclick={(e) => handleOpenTicket(e, ticket)}
+              >
+                {ticket.title}
+              </a>
+            </h2>
+            <div class="card-meta">
+              <span>PIC: <strong>{ticket.assigneeUsername || 'Belum diambil'}</strong></span>
+              <span class="tabular-nums">{new Date(ticket.createdAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
+            </div>
+            <a href={`/tickets/${ticket.ticketNumber}`} class="btn btn-secondary detail-link">Lihat Detail</a>
+          </article>
+        {/each}
+      </div>
 
       {#if totalPages > 1}
-        <div class="pagination-footer">
-          <span>Menampilkan {tickets.length} dari total {totalTickets} tiket</span>
-          <div class="pagination-buttons">
+        <nav class="pagination-bar" aria-label="Navigasi halaman tiket">
+          <span class="pagination-info">
+            Halaman {page} dari {totalPages} ({totalTickets} tiket)
+          </span>
+          <div class="pagination-actions">
             <button
               type="button"
-              class="btn-page"
+              class="btn btn-secondary"
               disabled={page <= 1}
               onclick={() => handlePageChange(page - 1)}
             >
               Sebelumnya
             </button>
-            <span class="page-indicator">{page} / {totalPages}</span>
             <button
               type="button"
-              class="btn-page"
+              class="btn btn-secondary"
               disabled={page >= totalPages}
               onclick={() => handlePageChange(page + 1)}
             >
-              Selanjutnya
+              Berikutnya
             </button>
           </div>
-        </div>
+        </nav>
       {/if}
-    </div>
+    {/if}
   {/if}
 </div>
 
 <style>
-  .tickets-container {
+  .tickets-view {
+    width: 100%;
+    max-width: none;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 24px;
   }
 
-  .tickets-header {
+  .page-header {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
   }
 
-  .section-desc {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-    margin-top: 2px;
-  }
-
-  .search-bar-form {
+  .toolbar {
     display: flex;
-    gap: 8px;
     align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
   }
 
-  .search-input-wrap {
+  .search-form {
     display: flex;
     align-items: center;
     gap: 8px;
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 0 12px;
     flex: 1;
-    max-width: 420px;
+    min-width: 280px;
+    max-width: 480px;
   }
 
-  .search-input-wrap input {
-    border: none;
-    background: transparent;
-    padding: 8px 0;
-    width: 100%;
-    color: var(--color-text);
-    font-size: 0.875rem;
-    outline: none;
+  .search-input-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
   }
 
-  .btn {
-    display: inline-flex;
+  .search-input-wrapper svg {
+    position: absolute;
+    left: 12px;
+    color: var(--color-text-muted);
+    pointer-events: none;
+  }
+
+  .search-input-wrapper input[type='search'] {
+    padding-left: 40px;
+  }
+
+  .filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .filter-item select {
+    min-width: 140px;
+  }
+
+  .checkbox-label {
+    display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    font-weight: 600;
     font-size: 0.875rem;
     cursor: pointer;
-    border: none;
-    transition: background-color 0.15s;
-    white-space: nowrap;
+    user-select: none;
   }
 
-  .btn-primary {
-    background-color: var(--color-primary);
-    color: var(--color-primary-text);
-  }
-
-  .btn-primary:hover {
-    background-color: var(--color-primary-hover);
-  }
-
-  .btn-secondary {
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 64px 24px;
     background-color: var(--color-surface);
-    color: var(--color-text);
     border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    gap: 12px;
   }
 
-  .btn-secondary:hover {
-    background-color: var(--color-surface-hover);
+  .empty-state-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-text);
   }
 
-  .table-card {
+  .empty-state-desc {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    margin-bottom: 8px;
+  }
+
+  .table-container {
+    width: 100%;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -284,135 +427,170 @@
     font-size: 0.875rem;
   }
 
-  th {
-    background-color: var(--color-bg);
-    padding: 12px 16px;
+  .tickets-table th {
+    padding: 14px 16px;
     font-weight: 600;
     color: var(--color-text-muted);
+    background-color: var(--color-bg);
     border-bottom: 1px solid var(--color-border);
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  td {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  tr:last-child td {
-    border-bottom: none;
-  }
-
-  tr:hover td {
-    background-color: var(--color-surface-hover);
-    cursor: pointer;
-  }
-
-  .cell-number {
-    font-family: monospace;
-    color: var(--color-primary);
-  }
-
-  .cell-title {
-    max-width: 260px;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .ticket-title-text {
-    font-weight: 500;
+  .tickets-table td {
+    padding: 16px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
   }
 
-  .cell-time {
-    color: var(--color-text-muted);
-    font-size: 0.8rem;
+  .tickets-table tr:last-child td {
+    border-bottom: none;
   }
 
-  .badge-priority {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
+  .tickets-table tr:hover td {
+    background-color: var(--color-surface-hover);
+  }
+
+  .cell-primary {
+    display: table-cell;
+  }
+
+  .cell-primary .ticket-title {
+    display: block;
+    margin-top: 4px;
+  }
+
+  .ticket-number {
     font-size: 0.75rem;
     font-weight: 600;
-  }
-
-  .priority-low { background-color: rgba(100, 116, 139, 0.15); color: #64748b; }
-  .priority-medium { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
-  .priority-high { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
-  .priority-critical { background-color: rgba(220, 38, 38, 0.15); color: var(--color-danger); }
-
-  .badge-status {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .status-open { background-color: rgba(59, 130, 246, 0.15); color: var(--color-primary); }
-  .status-in-progress { background-color: rgba(234, 179, 8, 0.15); color: #ca8a04; }
-  .status-closed { background-color: rgba(22, 163, 74, 0.15); color: var(--color-success); }
-
-  .btn-detail {
-    padding: 4px 10px;
-    border-radius: var(--radius-sm);
-    background-color: var(--color-bg);
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
-    font-size: 0.8rem;
-    cursor: pointer;
-  }
-
-  .pagination-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    border-top: 1px solid var(--color-border);
-    font-size: 0.8rem;
     color: var(--color-text-muted);
+    letter-spacing: 0.05em;
   }
 
-  .pagination-buttons {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .btn-page {
-    padding: 4px 10px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background-color: var(--color-surface);
+  .ticket-title {
     color: var(--color-text);
-    cursor: pointer;
-    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    word-break: break-word;
   }
 
-  .btn-page:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .ticket-title:hover {
+    color: var(--color-link);
+    text-decoration: underline;
   }
 
-  .empty-state, .loading-state {
-    text-align: center;
-    padding: 48px 24px;
+  .detail-link {
+    display: inline-flex;
+    width: max-content;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .ticket-card .detail-link {
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .cell-muted {
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  /* Mobile Card View */
+  .ticket-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ticket-card {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .card-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .badge-group {
+    display: flex;
+    gap: 6px;
+  }
+
+  .card-title {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    margin: 2px 0;
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    border-top: 1px solid var(--color-border);
+    padding-top: 8px;
+    margin-top: 4px;
+  }
+
+  .pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 8px 0;
+  }
+
+  .pagination-info {
+    font-size: 0.875rem;
     color: var(--color-text-muted);
   }
 
-  .empty-state svg {
-    margin-bottom: 12px;
-    color: var(--color-text-muted);
+  .pagination-actions {
+    display: flex;
+    gap: 8px;
   }
 
-  .empty-state h3 {
-    color: var(--color-text);
-    font-size: 1.1rem;
-    margin-bottom: 6px;
+  .desktop-only {
+    display: block;
+  }
+
+  .mobile-only {
+    display: none;
+  }
+
+  @media (max-width: 767px) {
+    .desktop-only {
+      display: none;
+    }
+    .mobile-only {
+      display: flex;
+    }
+    .toolbar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .search-form {
+      max-width: none;
+    }
+    .filter-controls {
+      width: 100%;
+    }
+    .filter-item {
+      flex: 1;
+    }
+    .filter-item select {
+      width: 100%;
+      min-width: 0;
+    }
   }
 </style>
