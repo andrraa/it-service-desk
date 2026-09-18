@@ -8,7 +8,7 @@
 
   // Create staff form
   let showCreateModal = $state(false);
-  let newNik = $state('');
+  let newFullName = $state('');
   let newUsername = $state('');
   let createError = $state('');
   let createdTempPassword = $state('');
@@ -42,8 +42,8 @@
 
   async function handleCreateITStaff(e: Event) {
     e.preventDefault();
-    if (!newNik.trim() || !newUsername.trim()) {
-      createError = 'NIK dan Username wajib diisi.';
+    if (!newFullName.trim() || !newUsername.trim()) {
+      createError = 'Nama lengkap dan Username wajib diisi.';
       return;
     }
 
@@ -58,7 +58,7 @@
           'Content-Type': 'application/json',
           'X-Requested-With': 'fetch',
         },
-        body: JSON.stringify({ nik: newNik.trim(), username: newUsername.trim() }),
+        body: JSON.stringify({ fullName: newFullName.trim(), username: newUsername.trim() }),
       });
 
       const data: any = await res.json();
@@ -68,7 +68,7 @@
       }
 
       createdTempPassword = data.temporaryPassword;
-      newNik = '';
+      newFullName = '';
       newUsername = '';
       await fetchUsers();
     } catch {
@@ -171,7 +171,7 @@
       <table class="admin-table">
         <thead>
           <tr>
-            <th>NIK</th>
+            <th>Nama Lengkap</th>
             <th>Username</th>
             <th>Role</th>
             <th>Status Akun</th>
@@ -183,8 +183,8 @@
         <tbody>
           {#each users as u}
             <tr>
-              <td class="cell-nik">{u.nik}</td>
-              <td><strong>{u.username}</strong></td>
+              <td><strong>{u.fullName || u.username}</strong></td>
+              <td class="cell-username">{u.username}</td>
               <td>
                 <span class="role-badge role-{u.role.toLowerCase().replace(' ', '-')}">
                   {u.role}
@@ -262,8 +262,8 @@
         {:else}
           <form onsubmit={handleCreateITStaff} class="staff-form" style="margin-top: 14px;">
             <div class="form-group">
-              <label for="staff-nik">NIK Karyawan</label>
-              <input id="staff-nik" type="text" bind:value={newNik} placeholder="Contoh: 009124" required disabled={isCreating} />
+              <label for="staff-fullname">Nama Lengkap</label>
+              <input id="staff-fullname" type="text" bind:value={newFullName} placeholder="Contoh: Budi Santoso" required disabled={isCreating} />
             </div>
 
             <div class="form-group">
@@ -298,7 +298,7 @@
       <div class="modal-card">
         <h3 id="modal-reset-title">Reset Password Pengguna</h3>
         <p class="modal-sub">
-          Pengguna: <strong>{resetTargetUser.username}</strong> ({resetTargetUser.nik}) — Role: {resetTargetUser.role}
+          Pengguna: <strong>{resetTargetUser.fullName || resetTargetUser.username}</strong> (@{resetTargetUser.username}) — Role: {resetTargetUser.role}
         </p>
 
         {#if resetError}
@@ -357,7 +357,7 @@
           {targetUser.isActive ? 'Nonaktifkan Akun Pengguna?' : 'Aktifkan Kembali Akun?'}
         </h3>
         <p class="modal-sub">
-          Pengguna: <strong>{targetUser.username}</strong> ({targetUser.nik}) — Role: {targetUser.role}
+          Pengguna: <strong>{targetUser.fullName || targetUser.username}</strong> (@{targetUser.username}) — Role: {targetUser.role}
         </p>
 
         {#if toggleError}
@@ -433,9 +433,8 @@
     border-bottom: none;
   }
 
-  .cell-nik {
+  .cell-username {
     font-family: monospace;
-    font-weight: 600;
   }
 
   .cell-actions {
@@ -474,7 +473,6 @@
   }
 
   .status-badge.active {
-    background-color: rgba(220, 38, 38, 0.1); /* fallback */
     background-color: rgba(22, 163, 74, 0.15);
     color: var(--color-success);
   }

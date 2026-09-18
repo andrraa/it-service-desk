@@ -1,34 +1,28 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { SQL } from 'bun';
-import { handleRequest as route, type AppContext } from '../src/server/app';
-import { MemoryRateLimiter } from '../src/server/rate-limit';
-import { openTestDatabase, closeTestDatabase } from './database';
+import { handleRequest, readConfig } from '../src/server/app';
 
 describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
   let sql: SQL;
-  // These cases test database uniqueness; limiter boundaries have separate regression coverage.
-  const rateLimiter = new MemoryRateLimiter(100, 60000);
-  const handleRequest = (request: Request, context: AppContext) => route(request, { ...context, rateLimiter });
+  const config = readConfig(process.env);
 
   beforeAll(async () => {
-    sql = await openTestDatabase();
-    // Clean up test users
-    await sql`DELETE FROM users WHERE username LIKE 'test_user_%' OR nik LIKE 'TEST_%'`;
+    sql = new SQL(config.databaseUrl);
+    await sql`DELETE FROM users WHERE username LIKE 'test_user_%'`;
   });
 
   afterAll(async () => {
-    await sql`DELETE FROM users WHERE username LIKE 'test_user_%' OR nik LIKE 'TEST_%'`;
-    await closeTestDatabase(sql);
+    await sql`DELETE FROM users WHERE username LIKE 'test_user_%'`;
+    await sql`close()`;
   });
 
-  test('acceptance: preserves leading zero in NIK string', async () => {
-    const nikWithLeadingZero = '000847291';
+  test('acceptance: formats full name to Title Case', async () => {
     const req = new Request('http://localhost/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
-        nik: nikWithLeadingZero,
-        username: 'test_user_nik_zero',
+        fullName: 'budi santoso wijaya',
+        username: 'test_user_titlecase',
         password: 'password_super_aman_123',
       }),
     });
@@ -36,21 +30,20 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
     const res = await handleRequest(req, { sql });
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.user.nik).toBe(nikWithLeadingZero);
+    expect(body.user.fullName).toBe('Budi Santoso Wijaya');
+    expect(body.user.username).toBe('test_user_titlecase');
 
-    // Verify directly in DB that leading zeros are stored as string
-    const rows = await sql`SELECT nik FROM users WHERE username = 'test_user_nik_zero'`;
+    const rows = await sql`SELECT full_name AS "fullName" FROM users WHERE username = 'test_user_titlecase'`;
     expect(rows.length).toBe(1);
-    expect(rows[0].nik).toBe(nikWithLeadingZero);
+    expect(rows[0].fullName).toBe('Budi Santoso Wijaya');
   });
 
   test('acceptance: username is case-insensitively unique', async () => {
-    // First registration: test_user_ci
     const req1 = new Request('http://localhost/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
-        nik: 'TEST_CI_1',
+        fullName: 'User CI 1',
         username: 'test_user_ci',
         password: 'password_super_aman_123',
       }),
@@ -58,12 +51,11 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
     const res1 = await handleRequest(req1, { sql });
     expect(res1.status).toBe(201);
 
-    // Duplicate registration with different casing: TEST_USER_CI
     const req2 = new Request('http://localhost/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
-        nik: 'TEST_CI_2',
+        fullName: 'User CI 2',
         username: 'TEST_USER_CI',
         password: 'password_super_aman_123',
       }),
@@ -80,10 +72,10 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
-        nik: 'TEST_ROLE_HACK',
+        fullName: 'Role Hacker',
         username: 'test_user_role_hack',
         password: 'password_super_aman_123',
-        role: 'Super Admin', // Malicious attempt to escalate role
+        role: 'Super Admin',
       }),
     });
     const res = await handleRequest(req, { sql });
@@ -91,7 +83,6 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
     const body = await res.json();
     expect(body.user.role).toBe('User');
 
-    // Verify in DB
     const rows = await sql`SELECT role FROM users WHERE username = 'test_user_role_hack'`;
     expect(rows[0].role).toBe('User');
   });
@@ -101,7 +92,7 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({
-        nik: 'TEST_NO_HASH_LEAK',
+        fullName: 'No Hash Leak',
         username: 'test_user_no_hash',
         password: 'password_super_aman_123',
       }),
@@ -115,12 +106,12 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
   });
 
   test('verification: concurrent registrations with same username only one succeeds', async () => {
-    const promises = Array.from({ length: 5 }).map((_, i) => {
+    const promises = Array.from({ length: 5 }).map((_) => {
       const req = new Request('http://localhost/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
         body: JSON.stringify({
-          nik: `TEST_CONCURRENT_${i}`,
+          fullName: 'Concurrent User',
           username: 'test_user_concurrent',
           password: 'password_super_aman_123',
         }),
@@ -129,9 +120,9 @@ describe('Auth Registration Integration Tests (Live PostgreSQL)', () => {
     });
 
     const responses = await Promise.all(promises);
-    const statuses = responses.map(r => r.status);
-    const successCount = statuses.filter(s => s === 201).length;
-    const conflictCount = statuses.filter(s => s === 409).length;
+    const statuses = responses.map((r) => r.status);
+    const successCount = statuses.filter((s) => s === 201).length;
+    const conflictCount = statuses.filter((s) => s === 409).length;
 
     expect(successCount).toBe(1);
     expect(conflictCount).toBe(4);

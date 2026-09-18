@@ -12,13 +12,12 @@ function createMockSql(impl: (query: string, ...args: any[]) => any): SQL {
 describe('Super Admin Bootstrap Script', () => {
   test('rejects bootstrap when required env variables are missing', async () => {
     const mockSql = createMockSql(() => []);
-    expect(bootstrapAdmin({}, mockSql)).rejects.toThrow('ADMIN_NIK, ADMIN_USERNAME, dan ADMIN_PASSWORD wajib');
+    expect(bootstrapAdmin({}, mockSql)).rejects.toThrow('ADMIN_USERNAME dan ADMIN_PASSWORD wajib');
   });
 
   test('rejects password shorter than 12 characters', async () => {
     const mockSql = createMockSql(() => []);
     expect(bootstrapAdmin({
-      ADMIN_NIK: '00001',
       ADMIN_USERNAME: 'superadmin',
       ADMIN_PASSWORD: 'short',
     }, mockSql)).rejects.toThrow('minimal 12 karakter');
@@ -32,8 +31,8 @@ describe('Super Admin Bootstrap Script', () => {
       if (query.includes('INSERT INTO users')) {
         return [{
           id: 1,
-          nik: values[0],
-          username: values[1],
+          username: values[0],
+          fullName: values[1],
           role: 'Super Admin',
         }];
       }
@@ -41,7 +40,6 @@ describe('Super Admin Bootstrap Script', () => {
     });
 
     const res = await bootstrapAdmin({
-      ADMIN_NIK: '00001',
       ADMIN_USERNAME: 'superadmin',
       ADMIN_PASSWORD: 'super_secure_admin_password_123',
     }, mockSql);
@@ -49,7 +47,6 @@ describe('Super Admin Bootstrap Script', () => {
     expect(res.created).toBe(true);
     expect(res.user?.role).toBe('Super Admin');
     expect(res.user?.username).toBe('superadmin');
-    expect(res.user?.nik).toBe('00001');
   });
 
   test('is idempotent when Super Admin already exists', async () => {
@@ -57,7 +54,6 @@ describe('Super Admin Bootstrap Script', () => {
       if (query.includes('FROM users')) {
         return [{
           id: 1,
-          nik: '00001',
           username: 'superadmin',
           role: 'Super Admin',
         }];
@@ -66,7 +62,6 @@ describe('Super Admin Bootstrap Script', () => {
     });
 
     const res = await bootstrapAdmin({
-      ADMIN_NIK: '00001',
       ADMIN_USERNAME: 'superadmin',
       ADMIN_PASSWORD: 'super_secure_admin_password_123',
     }, mockSql);

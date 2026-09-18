@@ -19,8 +19,8 @@ describe('Auth Endpoints (Login, Me, Logout)', () => {
       if (query.includes('FROM users')) {
         return [{
           id: 1,
-          nik: '00123',
           username: 'johndoe',
+          fullName: 'John Doe',
           passwordHash: passHash,
           role: 'User',
           isActive: true,
@@ -56,8 +56,8 @@ describe('Auth Endpoints (Login, Me, Logout)', () => {
       if (query.includes('FROM users')) {
         return [{
           id: 1,
-          nik: '00123',
           username: 'johndoe',
+          fullName: 'John Doe',
           passwordHash: passHash,
           role: 'User',
           isActive: true,
@@ -83,8 +83,8 @@ describe('Auth Endpoints (Login, Me, Logout)', () => {
       if (query.includes('FROM sessions')) {
         return [{
           id: '1',
-          nik: '00123',
           username: 'johndoe',
+          fullName: 'John Doe',
           role: 'User',
           isActive: true,
           mustChangePassword: false,

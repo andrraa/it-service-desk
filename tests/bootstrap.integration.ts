@@ -20,7 +20,6 @@ describe('Super Admin Bootstrap Integration Tests (Live PostgreSQL)', () => {
   test('acceptance: bootstraps explicit admin without logging secrets, idempotent on repetition', async () => {
     const adminPassword = 'super_secure_admin_password_123';
     const env = {
-      ADMIN_NIK: 'ADM_001',
       ADMIN_USERNAME: 'test_admin_bootstrap',
       ADMIN_PASSWORD: adminPassword,
     };
@@ -30,11 +29,10 @@ describe('Super Admin Bootstrap Integration Tests (Live PostgreSQL)', () => {
     expect(result1.created).toBe(true);
     expect(result1.user?.role).toBe('Super Admin');
     expect(result1.user?.username).toBe('test_admin_bootstrap');
-    expect(result1.user?.nik).toBe('ADM_001');
 
     // Verify in database: password hash exists, role is Super Admin
     const rows = await sql`
-      SELECT id, nik, username, role, password_hash AS "passwordHash"
+      SELECT id, username, role, password_hash AS "passwordHash"
       FROM users
       WHERE username = 'test_admin_bootstrap'
     `;

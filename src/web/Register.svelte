@@ -7,7 +7,6 @@
 
   let { onSuccess }: Props = $props();
 
-  let nik = $state('');
   let fullName = $state('');
   let username = $state('');
   let password = $state('');
@@ -18,7 +17,6 @@
   let successMessage = $state('');
   let isSubmitting = $state(false);
 
-  // Format UC Words on input blur
   function handleFullNameBlur() {
     if (fullName.trim()) {
       fullName = fullName
@@ -48,7 +46,7 @@
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nik, fullName, username, password }),
+        body: JSON.stringify({ fullName, username, password }),
       });
 
       const data: any = await res.json();
@@ -63,7 +61,6 @@
       }
 
       successMessage = 'Registrasi berhasil! Anda sekarang dapat masuk menggunakan akun baru.';
-      nik = '';
       fullName = '';
       username = '';
       password = '';
@@ -80,10 +77,10 @@
   }
 </script>
 
-<div class="auth-card register-card">
+<div class="auth-card">
   <div class="auth-header">
     <h1>Daftar Akun</h1>
-    <p class="auth-subtitle">Daftarkan Nomor Induk Karyawan dan buat kredensial akun baru.</p>
+    <p class="auth-subtitle">Lengkapi nama lengkap dan buat kredensial untuk mendaftar akun baru.</p>
   </div>
 
   {#if generalError}
@@ -105,49 +102,25 @@
   {/if}
 
   <form onsubmit={handleSubmit} novalidate class="auth-form">
-    <!-- Baris 1: NIK & Nama Lengkap -->
-    <div class="form-row-2">
-      <div class="form-group">
-        <label for="nik">Nomor Induk Karyawan (NIK)</label>
-        <input
-          id="nik"
-          type="text"
-          bind:value={nik}
-          placeholder="Contoh: 12.345.678"
-          required
-          disabled={isSubmitting}
-          class:input-error={Boolean(errors.nik)}
-          aria-invalid={Boolean(errors.nik)}
-          aria-describedby={errors.nik ? 'nik-error' : 'nik-hint'}
-        />
-        {#if errors.nik}
-          <span id="nik-error" class="field-error">{errors.nik}</span>
-        {:else}
-          <span id="nik-hint" class="field-hint">Mendukung angka, titik, dan tanda hubung.</span>
-        {/if}
-      </div>
-
-      <div class="form-group">
-        <label for="fullName">Nama Lengkap</label>
-        <input
-          id="fullName"
-          type="text"
-          bind:value={fullName}
-          onblur={handleFullNameBlur}
-          placeholder="Contoh: John Doe"
-          required
-          disabled={isSubmitting}
-          class:input-error={Boolean(errors.fullName)}
-          aria-invalid={Boolean(errors.fullName)}
-          aria-describedby={errors.fullName ? 'fullname-error' : undefined}
-        />
-        {#if errors.fullName}
-          <span id="fullname-error" class="field-error">{errors.fullName}</span>
-        {/if}
-      </div>
+    <div class="form-group">
+      <label for="fullName">Nama Lengkap</label>
+      <input
+        id="fullName"
+        type="text"
+        bind:value={fullName}
+        onblur={handleFullNameBlur}
+        placeholder="Masukkan nama lengkap Anda"
+        required
+        disabled={isSubmitting}
+        class:input-error={Boolean(errors.fullName)}
+        aria-invalid={Boolean(errors.fullName)}
+        aria-describedby={errors.fullName ? 'fullname-error' : undefined}
+      />
+      {#if errors.fullName}
+        <span id="fullname-error" class="field-error">{errors.fullName}</span>
+      {/if}
     </div>
 
-    <!-- Baris 2: Username -->
     <div class="form-group">
       <label for="username">Username</label>
       <input
@@ -166,48 +139,45 @@
       {/if}
     </div>
 
-    <!-- Baris 3: Password & Konfirmasi Password -->
-    <div class="form-row-2">
-      <div class="form-group">
-        <label for="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          bind:value={password}
-          placeholder="Minimal 12 karakter"
-          required
-          disabled={isSubmitting}
-          class:input-error={Boolean(errors.password)}
-          aria-invalid={Boolean(errors.password)}
-          aria-describedby={errors.password ? 'password-error' : 'password-hint'}
-        />
-        {#if errors.password}
-          <span id="password-error" class="field-error">{errors.password}</span>
-        {:else}
-          <span id="password-hint" class="field-hint">Minimal 12 karakter.</span>
-        {/if}
-      </div>
-
-      <div class="form-group">
-        <label for="confirmPassword">Konfirmasi Password</label>
-        <input
-          id="confirmPassword"
-          type="password"
-          bind:value={confirmPassword}
-          placeholder="Ulangi password di atas"
-          required
-          disabled={isSubmitting}
-          class:input-error={Boolean(errors.confirmPassword)}
-          aria-invalid={Boolean(errors.confirmPassword)}
-          aria-describedby={errors.confirmPassword ? 'confirm-error' : undefined}
-        />
-        {#if errors.confirmPassword}
-          <span id="confirm-error" class="field-error">{errors.confirmPassword}</span>
-        {/if}
-      </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input
+        id="password"
+        type="password"
+        bind:value={password}
+        placeholder="Minimal 12 karakter"
+        required
+        disabled={isSubmitting}
+        class:input-error={Boolean(errors.password)}
+        aria-invalid={Boolean(errors.password)}
+        aria-describedby={errors.password ? 'password-error' : 'password-hint'}
+      />
+      {#if errors.password}
+        <span id="password-error" class="field-error">{errors.password}</span>
+      {:else}
+        <span id="password-hint" class="field-hint">Minimal 12 karakter untuk keamanan akun.</span>
+      {/if}
     </div>
 
-    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;" disabled={isSubmitting}>
+    <div class="form-group">
+      <label for="confirmPassword">Konfirmasi Password</label>
+      <input
+        id="confirmPassword"
+        type="password"
+        bind:value={confirmPassword}
+        placeholder="Ulangi password di atas"
+        required
+        disabled={isSubmitting}
+        class:input-error={Boolean(errors.confirmPassword)}
+        aria-invalid={Boolean(errors.confirmPassword)}
+        aria-describedby={errors.confirmPassword ? 'confirm-error' : undefined}
+      />
+      {#if errors.confirmPassword}
+        <span id="confirm-error" class="field-error">{errors.confirmPassword}</span>
+      {/if}
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;" disabled={isSubmitting}>
       {isSubmitting ? 'Mendaftarkan…' : 'Daftar Sekarang'}
     </button>
   </form>
@@ -221,27 +191,30 @@
 </div>
 
 <style>
-  .register-card {
-    max-width: 620px;
+  .auth-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 32px;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  .auth-header {
+    margin-bottom: 24px;
+  }
+
+  .auth-subtitle {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    margin-top: 6px;
   }
 
   .auth-form {
     display: flex;
     flex-direction: column;
     gap: 16px;
-  }
-
-  .form-row-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-
-  @media (max-width: 640px) {
-    .form-row-2 {
-      grid-template-columns: 1fr;
-      gap: 16px;
-    }
   }
 
   .auth-footer {

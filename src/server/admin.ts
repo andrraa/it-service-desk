@@ -1,12 +1,12 @@
 export interface CreateITStaffInput {
-  nik: string;
   username: string;
+  fullName: string;
   temporaryPassword?: string;
 }
 
 export interface UpdateUserInput {
-  nik?: string;
   username?: string;
+  fullName?: string;
   isActive?: boolean;
 }
 
@@ -17,19 +17,19 @@ export function generateTemporaryPassword(): string {
   return Array.from(bytes, (b) => chars[b % chars.length]).join('');
 }
 
-export function validateCreateITStaffInput(input: unknown): { valid: true; data: { nik: string; username: string; temporaryPassword: string } } | { valid: false; errors: Record<string, string> } {
+export function validateCreateITStaffInput(input: unknown): { valid: true; data: { username: string; fullName: string; temporaryPassword: string } } | { valid: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
   if (typeof input !== 'object' || input === null) {
     return { valid: false, errors: { _form: 'Payload tidak valid.' } };
   }
 
-  const { nik, username, temporaryPassword } = input as Record<string, unknown>;
+  const { username, fullName, temporaryPassword } = input as Record<string, unknown>;
 
-  if (typeof nik !== 'string' || nik.trim() === '') {
-    errors.nik = 'NIK wajib diisi.';
-  } else if (!/^[0-9A-Za-z_-]{3,64}$/.test(nik.trim())) {
-    errors.nik = 'Format NIK tidak valid (3-64 karakter alfanumerik/tanda hubung).';
+  if (typeof fullName !== 'string' || fullName.trim() === '') {
+    errors.fullName = 'Nama lengkap wajib diisi.';
+  } else if (fullName.trim().length < 2 || fullName.trim().length > 128) {
+    errors.fullName = 'Nama lengkap harus antara 2 dan 128 karakter.';
   }
 
   if (typeof username !== 'string' || username.trim() === '') {
@@ -49,8 +49,8 @@ export function validateCreateITStaffInput(input: unknown): { valid: true; data:
   return {
     valid: true,
     data: {
-      nik: (nik as string).trim(),
       username: (username as string).trim(),
+      fullName: (fullName as string).trim(),
       temporaryPassword: pass,
     },
   };

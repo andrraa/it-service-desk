@@ -170,36 +170,32 @@ async function routeRequest(request: Request, ctx: AppContext) {
       return json({ error: { code: 'VALIDATION_ERROR', message: 'Data pendaftaran tidak valid.', details: validation.errors } }, 422);
     }
 
-    const { nik, username, fullName, password } = validation.data;
+    const { username, fullName, password } = validation.data;
 
     try {
       const existing = await ctx.sql`
-        SELECT nik, username FROM users
-        WHERE nik = ${nik} OR LOWER(username) = LOWER(${username})
+        SELECT username FROM users
+        WHERE LOWER(username) = LOWER(${username})
         LIMIT 1
       `;
 
       if (existing.length > 0) {
-        const found = existing[0] as { nik: string; username: string };
-        const details: Record<string, string> = {};
-        if (found.nik === nik) details.nik = 'NIK sudah terdaftar.';
-        if (found.username.toLowerCase() === username.toLowerCase()) details.username = 'Username sudah digunakan.';
-        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details } }, 409);
+        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: { username: 'Username sudah digunakan.' } } }, 409);
       }
 
       const passwordHash = await hashPassword(password);
 
       const inserted = await ctx.sql`
-        INSERT INTO users (nik, username, full_name, password_hash, role, is_active, must_change_password)
-        VALUES (${nik}, ${username}, ${fullName}, ${passwordHash}, 'User', TRUE, FALSE)
-        RETURNING id, nik, username, full_name AS "fullName", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+        INSERT INTO users (username, full_name, password_hash, role, is_active, must_change_password)
+        VALUES (${username}, ${fullName}, ${passwordHash}, 'User', TRUE, FALSE)
+        RETURNING id, username, full_name AS "fullName", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
       `;
 
       const newUser = inserted[0];
       return json({ message: 'Registrasi berhasil.', user: newUser }, 201);
     } catch (err: any) {
       if (err?.code === '23505' || err?.errno === '23505') {
-        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: { _conflict: 'NIK atau Username sudah digunakan.' } } }, 409);
+        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: { _conflict: 'Username sudah digunakan.' } } }, 409);
       }
       console.error('Registration error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem.' } }, 500);
@@ -238,7 +234,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
 
     try {
       const rows = await ctx.sql`
-        SELECT id, nik, username, full_name AS "fullName", password_hash AS "passwordHash", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+        SELECT id, username, full_name AS "fullName", password_hash AS "passwordHash", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
         FROM users
         WHERE LOWER(username) = LOWER(${username})
         LIMIT 1
@@ -250,7 +246,6 @@ async function routeRequest(request: Request, ctx: AppContext) {
 
       const user = rows[0] as {
         id: number | string;
-        nik: string;
         username: string;
         fullName?: string;
         passwordHash: string;
@@ -285,7 +280,6 @@ async function routeRequest(request: Request, ctx: AppContext) {
         message: 'Login berhasil.',
         user: {
           id: String(user.id),
-          nik: user.nik,
           username: user.username,
           fullName: user.fullName,
           role: user.role,
@@ -502,7 +496,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
           t.ticket_number AS "ticketNumber", 
           t.creator_id AS "creatorId", 
           u.username AS "creatorUsername",
-          u.nik AS "creatorNik",
+          COALESCE(u.full_name, u.username) AS "creatorFullName",
           t.assignee_id AS "assigneeId",
           a.username AS "assigneeUsername",
           t.title, 
@@ -1241,7 +1235,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
           t.ticket_number AS "ticketNumber", 
           t.creator_id AS "creatorId", 
           u.username AS "creatorUsername",
-          u.nik AS "creatorNik",
+          COALESCE(u.full_name, u.username) AS "creatorFullName",
           t.assignee_id AS "assigneeId",
           a.username AS "assigneeUsername",
           t.title, 
@@ -1297,7 +1291,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
       try {
         const rows = await ctx.sql`
           SELECT 
-            id, nik, username, role, is_active AS "isActive", 
+            id, username, full_name AS "fullName", role, is_active AS "isActive", 
             must_change_password AS "mustChangePassword", created_at AS "createdAt"
           FROM users
           ORDER BY role ASC, created_at DESC
@@ -1324,29 +1318,25 @@ async function routeRequest(request: Request, ctx: AppContext) {
         return json({ error: { code: 'VALIDATION_ERROR', message: 'Data staf IT tidak valid.', details: validation.errors } }, 422);
       }
 
-      const { nik, username, temporaryPassword } = validation.data;
+      const { username, fullName, temporaryPassword } = validation.data;
 
       try {
         const existing = await ctx.sql`
-          SELECT nik, username FROM users
-          WHERE nik = ${nik} OR LOWER(username) = LOWER(${username})
+          SELECT username FROM users
+          WHERE LOWER(username) = LOWER(${username})
           LIMIT 1
         `;
 
         if (existing.length > 0) {
-          const found = existing[0] as { nik: string; username: string };
-          const details: Record<string, string> = {};
-          if (found.nik === nik) details.nik = 'NIK sudah terdaftar.';
-          if (found.username.toLowerCase() === username.toLowerCase()) details.username = 'Username sudah digunakan.';
-          return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details } }, 409);
+          return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: { username: 'Username sudah digunakan.' } } }, 409);
         }
 
         const passwordHash = await hashPassword(temporaryPassword);
 
         const inserted = await ctx.sql`
-          INSERT INTO users (nik, username, password_hash, role, is_active, must_change_password)
-          VALUES (${nik}, ${username}, ${passwordHash}, 'IT Staff', TRUE, TRUE)
-          RETURNING id, nik, username, role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+          INSERT INTO users (username, full_name, password_hash, role, is_active, must_change_password)
+          VALUES (${username}, ${fullName}, ${passwordHash}, 'IT Staff', TRUE, TRUE)
+          RETURNING id, username, full_name AS "fullName", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
         `;
 
         const newStaff = inserted[0];
@@ -1391,14 +1381,14 @@ async function routeRequest(request: Request, ctx: AppContext) {
       return json({ error: { code: 'VALIDATION_ERROR', message: 'Data tidak valid.' } }, 422);
     }
 
-    const { isActive, nik, username } = body as Record<string, unknown>;
+    const { isActive, fullName, username } = body as Record<string, unknown>;
 
     try {
-      const targetRows = await ctx.sql`SELECT id, nik, username, role, is_active AS "isActive" FROM users WHERE id = ${targetUserId} LIMIT 1`;
+      const targetRows = await ctx.sql`SELECT id, username, full_name AS "fullName", role, is_active AS "isActive" FROM users WHERE id = ${targetUserId} LIMIT 1`;
       if (targetRows.length === 0) {
         return json({ error: { code: 'NOT_FOUND', message: 'Pengguna tidak ditemukan.' } }, 404);
       }
-      const targetUser = targetRows[0] as { id: number | string; nik: string; username: string; role: string; isActive: boolean };
+      const targetUser = targetRows[0] as { id: number | string; username: string; fullName: string; role: string; isActive: boolean };
 
       // Acceptance: Lindungi Super Admin aktif terakhir
       if (targetUser.role === 'Super Admin' && isActive === false) {
@@ -1430,11 +1420,11 @@ async function routeRequest(request: Request, ctx: AppContext) {
         UPDATE users
         SET 
           is_active = COALESCE(${typeof isActive === 'boolean' ? isActive : null}, is_active),
-          nik = COALESCE(${typeof nik === 'string' && nik.trim() ? nik.trim() : null}, nik),
+          full_name = COALESCE(${typeof fullName === 'string' && fullName.trim() ? fullName.trim() : null}, full_name),
           username = COALESCE(${typeof username === 'string' && username.trim() ? username.trim() : null}, username),
           updated_at = NOW()
         WHERE id = ${targetUser.id}
-        RETURNING id, nik, username, role, is_active AS "isActive", must_change_password AS "mustChangePassword"
+        RETURNING id, username, full_name AS "fullName", role, is_active AS "isActive", must_change_password AS "mustChangePassword"
       `;
 
       // Jika dinonaktifkan: Acceptance — cabut seluruh sesi aktifnya
@@ -1543,7 +1533,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
 
     try {
       const targetRows = await ctx.sql`
-        SELECT id, username, nik, role FROM users WHERE id = ${targetUserId} LIMIT 1
+        SELECT id, username, full_name AS "fullName", role FROM users WHERE id = ${targetUserId} LIMIT 1
       `;
       if (targetRows.length === 0) {
         return json({ error: { code: 'NOT_FOUND', message: 'Pengguna tidak ditemukan.' } }, 404);

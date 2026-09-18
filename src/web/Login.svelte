@@ -39,7 +39,7 @@
           'Content-Type': 'application/json',
           'X-Requested-With': 'fetch',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: username.trim(), password }),
       });
 
       const data: any = await res.json();
@@ -148,7 +148,7 @@
         <p>Aplikasi IT Service Desk tidak menggunakan email publik untuk mereset password demi menjaga keamanan internal.</p>
         <ol style="margin-top: 8px; padding-left: 20px; font-size: 0.85rem; line-height: 1.6; color: var(--color-text);">
           <li>Hubungi <strong>Administrator IT / Super Admin</strong> kantor Anda secara langsung atau melalui kanal komunikasi resmi internal.</li>
-          <li>Sampaikan <strong>NIK Karyawan</strong> dan <strong>Username</strong> Anda untuk verifikasi identitas.</li>
+          <li>Sampaikan <strong>Username</strong> Anda untuk verifikasi identitas akun.</li>
           <li>Super Admin akan menerbitkan <strong>Password Sementara</strong> yang berlaku selama 24 jam.</li>
           <li>Gunakan password sementara tersebut untuk masuk, dan Anda akan langsung diarahkan untuk membuat password baru permanen.</li>
         </ol>

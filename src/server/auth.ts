@@ -2,9 +2,8 @@ import type { SQL } from 'bun';
 
 export interface User {
   id: string;
-  nik: string;
   username: string;
-  fullName?: string;
+  fullName: string;
   role: 'User' | 'IT Staff' | 'Super Admin';
   isActive: boolean;
   mustChangePassword: boolean;
@@ -12,9 +11,8 @@ export interface User {
 }
 
 export interface RegisterInput {
-  nik: string;
-  username: string;
   fullName: string;
+  username: string;
   password: string;
 }
 
@@ -42,13 +40,7 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
     return { valid: false, errors: { _form: 'Payload tidak valid.' } };
   }
 
-  const { nik, username, fullName, password } = input as Record<string, unknown>;
-
-  if (typeof nik !== 'string' || nik.trim() === '') {
-    errors.nik = 'NIK wajib diisi.';
-  } else if (!/^[0-9A-Za-z._-]{3,64}$/.test(nik.trim())) {
-    errors.nik = 'Format NIK tidak valid (3-64 karakter alfanumerik, titik, tanda hubung, atau garis bawah).';
-  }
+  const { fullName, username, password } = input as Record<string, unknown>;
 
   if (typeof fullName !== 'string' || fullName.trim() === '') {
     errors.fullName = 'Nama lengkap wajib diisi.';
@@ -77,9 +69,8 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
   return {
     valid: true,
     data: {
-      nik: (nik as string).trim(),
-      username: (username as string).trim(),
       fullName: toTitleCase(fullName as string),
+      username: (username as string).trim(),
       password: password as string,
     },
   };
@@ -142,7 +133,6 @@ export function parseCookies(header: string | null): Record<string, string> {
       try {
         cookies[name] = decodeURIComponent(rest.join('='));
       } catch {
-        // If decoding fails, the cookie is invalid / malformed
         continue;
       }
     }
@@ -172,9 +162,8 @@ export async function getSessionUser(sql: SQL, token: string): Promise<User | nu
   const rows = await sql`
     SELECT 
       u.id, 
-      u.nik, 
       u.username, 
-      u.full_name AS "fullName",
+      COALESCE(u.full_name, u.username) AS "fullName",
       u.role, 
       u.is_active AS "isActive", 
       u.must_change_password AS "mustChangePassword", 
@@ -187,10 +176,18 @@ export async function getSessionUser(sql: SQL, token: string): Promise<User | nu
   `;
 
   if (rows.length === 0) return null;
-  const row = rows[0] as User;
+  const row = rows[0] as {
+    id: number | string;
+    username: string;
+    fullName: string;
+    role: 'User' | 'IT Staff' | 'Super Admin';
+    isActive: boolean;
+    mustChangePassword: boolean;
+    createdAt: string;
+  };
+
   return {
     id: String(row.id),
-    nik: row.nik,
     username: row.username,
     fullName: row.fullName,
     role: row.role,
