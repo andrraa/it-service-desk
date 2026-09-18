@@ -170,7 +170,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
       return json({ error: { code: 'VALIDATION_ERROR', message: 'Data pendaftaran tidak valid.', details: validation.errors } }, 422);
     }
 
-    const { nik, username, password } = validation.data;
+    const { nik, username, fullName, password } = validation.data;
 
     try {
       const existing = await ctx.sql`
@@ -190,9 +190,9 @@ async function routeRequest(request: Request, ctx: AppContext) {
       const passwordHash = await hashPassword(password);
 
       const inserted = await ctx.sql`
-        INSERT INTO users (nik, username, password_hash, role, is_active, must_change_password)
-        VALUES (${nik}, ${username}, ${passwordHash}, 'User', TRUE, FALSE)
-        RETURNING id, nik, username, role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+        INSERT INTO users (nik, username, full_name, password_hash, role, is_active, must_change_password)
+        VALUES (${nik}, ${username}, ${fullName}, ${passwordHash}, 'User', TRUE, FALSE)
+        RETURNING id, nik, username, full_name AS "fullName", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
       `;
 
       const newUser = inserted[0];
@@ -238,7 +238,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
 
     try {
       const rows = await ctx.sql`
-        SELECT id, nik, username, password_hash AS "passwordHash", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+        SELECT id, nik, username, full_name AS "fullName", password_hash AS "passwordHash", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
         FROM users
         WHERE LOWER(username) = LOWER(${username})
         LIMIT 1
@@ -252,6 +252,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
         id: number | string;
         nik: string;
         username: string;
+        fullName?: string;
         passwordHash: string;
         role: 'User' | 'IT Staff' | 'Super Admin';
         isActive: boolean;
@@ -286,6 +287,7 @@ async function routeRequest(request: Request, ctx: AppContext) {
           id: String(user.id),
           nik: user.nik,
           username: user.username,
+          fullName: user.fullName,
           role: user.role,
           isActive: user.isActive,
           mustChangePassword: user.mustChangePassword,

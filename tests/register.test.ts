@@ -27,7 +27,7 @@ describe('POST /api/auth/register', () => {
     const mockSql = createMockSql(() => []);
     const req = new Request('http://localhost/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ nik: '', username: '', password: '123' }),
+      body: JSON.stringify({ nik: '', fullName: '', username: '', password: '123' }),
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
     });
     const res = await handleRequest(req, { sql: mockSql });
@@ -35,6 +35,7 @@ describe('POST /api/auth/register', () => {
     const body = await res.json();
     expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(body.error.details.nik).toBeDefined();
+    expect(body.error.details.fullName).toBeDefined();
     expect(body.error.details.username).toBeDefined();
     expect(body.error.details.password).toBeDefined();
   });
@@ -50,6 +51,7 @@ describe('POST /api/auth/register', () => {
       method: 'POST',
       body: JSON.stringify({
         nik: '00123',
+        fullName: 'Existing User',
         username: 'existing_user',
         password: 'password_super_panjang_123',
       }),
@@ -73,6 +75,7 @@ describe('POST /api/auth/register', () => {
           id: '1',
           nik: values[0],
           username: values[1],
+          fullName: values[2],
           role: 'User',
           isActive: true,
           mustChangePassword: false,
@@ -85,7 +88,8 @@ describe('POST /api/auth/register', () => {
     const req = new Request('http://localhost/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({
-        nik: '00987',
+        nik: '00.987.12',
+        fullName: 'new employee',
         username: 'new_employee',
         password: 'password_super_panjang_123',
       }),
@@ -96,9 +100,10 @@ describe('POST /api/auth/register', () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.message).toBe('Registrasi berhasil.');
-    expect(body.user.nik).toBe('00987');
+    expect(body.user.nik).toBe('00.987.12');
     expect(body.user.username).toBe('new_employee');
+    expect(body.user.fullName).toBe('New Employee');
     expect(body.user.role).toBe('User');
-    expect(body.user.passwordHash).toBeUndefined(); // Never leak password hash
+    expect(body.user.passwordHash).toBeUndefined();
   });
 });

@@ -4,6 +4,7 @@ export interface User {
   id: string;
   nik: string;
   username: string;
+  fullName?: string;
   role: 'User' | 'IT Staff' | 'Super Admin';
   isActive: boolean;
   mustChangePassword: boolean;
@@ -13,12 +14,25 @@ export interface User {
 export interface RegisterInput {
   nik: string;
   username: string;
+  fullName: string;
   password: string;
 }
 
 export interface LoginInput {
   username: string;
   password: string;
+}
+
+/**
+ * Converts a string to Title Case / Upper Case Words (e.g. "john doe" -> "John Doe")
+ */
+export function toTitleCase(str: string): string {
+  return str
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 export function validateRegisterInput(input: unknown): { valid: true; data: RegisterInput } | { valid: false; errors: Record<string, string> } {
@@ -28,12 +42,18 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
     return { valid: false, errors: { _form: 'Payload tidak valid.' } };
   }
 
-  const { nik, username, password } = input as Record<string, unknown>;
+  const { nik, username, fullName, password } = input as Record<string, unknown>;
 
   if (typeof nik !== 'string' || nik.trim() === '') {
     errors.nik = 'NIK wajib diisi.';
-  } else if (!/^[0-9A-Za-z_-]{3,64}$/.test(nik.trim())) {
-    errors.nik = 'Format NIK tidak valid (3-64 karakter alfanumerik/tanda hubung).';
+  } else if (!/^[0-9A-Za-z._-]{3,64}$/.test(nik.trim())) {
+    errors.nik = 'Format NIK tidak valid (3-64 karakter alfanumerik, titik, tanda hubung, atau garis bawah).';
+  }
+
+  if (typeof fullName !== 'string' || fullName.trim() === '') {
+    errors.fullName = 'Nama lengkap wajib diisi.';
+  } else if (fullName.trim().length < 2 || fullName.trim().length > 128) {
+    errors.fullName = 'Nama lengkap harus antara 2 dan 128 karakter.';
   }
 
   if (typeof username !== 'string' || username.trim() === '') {
@@ -59,6 +79,7 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
     data: {
       nik: (nik as string).trim(),
       username: (username as string).trim(),
+      fullName: toTitleCase(fullName as string),
       password: password as string,
     },
   };
@@ -79,10 +100,7 @@ export function validateLoginInput(input: unknown): { valid: true; data: LoginIn
 
   if (typeof password !== 'string' || password === '') {
     errors.password = 'Password wajib diisi.';
-  } else if (password.length > 1024) {
-    errors.password = 'Password maksimal 1024 karakter.';
   }
-  if (typeof username === 'string' && username.length > 64) errors.username = 'Username terlalu panjang.';
 
   if (Object.keys(errors).length > 0) {
     return { valid: false, errors };
@@ -117,11 +135,16 @@ export function generateSessionId(): string {
 
 export function parseCookies(header: string | null): Record<string, string> {
   if (!header) return {};
-  const cookies: Record<string, string> = Object.create(null);
+  const cookies: Record<string, string> = {};
   for (const pair of header.split(';')) {
     const [name, ...rest] = pair.trim().split('=');
     if (name && rest.length > 0) {
-      try { cookies[name] = decodeURIComponent(rest.join('=')); } catch { /* Invalid cookies are not credentials. */ }
+      try {
+        cookies[name] = decodeURIComponent(rest.join('='));
+      } catch {
+        // If decoding fails, the cookie is invalid / malformed
+        continue;
+      }
     }
   }
   return cookies;
@@ -151,6 +174,7 @@ export async function getSessionUser(sql: SQL, token: string): Promise<User | nu
       u.id, 
       u.nik, 
       u.username, 
+      u.full_name AS "fullName",
       u.role, 
       u.is_active AS "isActive", 
       u.must_change_password AS "mustChangePassword", 
@@ -168,6 +192,7 @@ export async function getSessionUser(sql: SQL, token: string): Promise<User | nu
     id: String(row.id),
     nik: row.nik,
     username: row.username,
+    fullName: row.fullName,
     role: row.role,
     isActive: row.isActive,
     mustChangePassword: row.mustChangePassword,
