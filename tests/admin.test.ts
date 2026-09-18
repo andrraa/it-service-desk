@@ -28,4 +28,16 @@ describe('Admin user pagination', () => {
     expect(queries.some((query) => query.includes('LIMIT ? OFFSET ?'))).toBe(true);
     expect(body.pagination).toEqual({ page: 2, limit: 10, total: 23, totalPages: 3 });
   });
+
+  test('GET /api/admin/users rejects unsupported filters', async () => {
+    const sql = createMockSql((query) => query.includes('FROM sessions')
+      ? [{ id: '1', username: 'superadmin', role: 'Super Admin', isActive: true, mustChangePassword: false }]
+      : []);
+
+    const response = await handleRequest(new Request('http://localhost/api/admin/users?role=Owner', {
+      headers: { Cookie: 'session_id=valid_token' },
+    }), { sql });
+
+    expect(response.status).toBe(422);
+  });
 });

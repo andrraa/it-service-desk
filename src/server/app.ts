@@ -1292,18 +1292,29 @@ async function routeRequest(request: Request, ctx: AppContext) {
         const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '10', 10) || 10));
         const offset = (page - 1) * limit;
+        const query = url.searchParams.get('q')?.trim() || '';
+        const role = url.searchParams.get('role') || '';
+        const status = url.searchParams.get('status') || '';
+        if (role && !['User', 'IT Staff', 'Super Admin'].includes(role)) throw new RequestError(422, 'VALIDATION_ERROR', 'Role tidak valid.');
+        if (status && !['active', 'inactive'].includes(status)) throw new RequestError(422, 'VALIDATION_ERROR', 'Status akun tidak valid.');
+        const searchPattern = query ? `%${query}%` : null;
+        const filter = ctx.sql`${searchPattern ? ctx.sql`(username ILIKE ${searchPattern} OR full_name ILIKE ${searchPattern})` : ctx.sql`TRUE`}
+          AND (${role ? ctx.sql`role = ${role}` : ctx.sql`TRUE`})
+          AND (${status ? ctx.sql`is_active = ${status === 'active'}` : ctx.sql`TRUE`})`;
         const rows = await ctx.sql`
           SELECT
             id, username, full_name AS "fullName", role, is_active AS "isActive",
             must_change_password AS "mustChangePassword", created_at AS "createdAt"
           FROM users
+          WHERE ${filter}
           ORDER BY role ASC, created_at DESC
           LIMIT ${limit} OFFSET ${offset}
         `;
-        const countRows = await ctx.sql`SELECT COUNT(*)::int AS count FROM users`;
+        const countRows = await ctx.sql`SELECT COUNT(*)::int AS count FROM users WHERE ${filter}`;
         const total = (countRows[0] as { count: number }).count;
         return json({ users: rows, pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) } });
       } catch (err) {
+        if (err instanceof RequestError) throw err;
         console.error('List users error:', err);
         return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil daftar pengguna.' } }, 500);
       }

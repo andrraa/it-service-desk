@@ -8,6 +8,9 @@
   let page = $state(1);
   let totalPages = $state(1);
   let totalUsers = $state(0);
+  let searchQuery = $state('');
+  let roleFilter = $state('');
+  let statusFilter = $state('');
 
   // Create staff form
   let showCreateModal = $state(false);
@@ -32,7 +35,13 @@
     isLoading = true;
     errorMessage = '';
     try {
-      const res = await fetch(`/api/admin/users?page=${targetPage}&limit=10`);
+      const url = new URL('/api/admin/users', window.location.origin);
+      url.searchParams.set('page', String(targetPage));
+      url.searchParams.set('limit', '10');
+      if (searchQuery.trim()) url.searchParams.set('q', searchQuery.trim());
+      if (roleFilter) url.searchParams.set('role', roleFilter);
+      if (statusFilter) url.searchParams.set('status', statusFilter);
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Gagal memuat daftar pengguna.');
       const data: any = await res.json();
       users = data.users || [];
@@ -44,6 +53,18 @@
     } finally {
       isLoading = false;
     }
+  }
+
+  function handleSearch(e: Event) {
+    e.preventDefault();
+    void fetchUsers(1);
+  }
+
+  function resetFilters() {
+    searchQuery = '';
+    roleFilter = '';
+    statusFilter = '';
+    void fetchUsers(1);
   }
 
   async function handleCreateITStaff(e: Event) {
@@ -162,6 +183,31 @@
     </button>
   </div>
 
+  <div class="toolbar">
+    <form class="search-form" onsubmit={handleSearch}>
+      <input type="search" bind:value={searchQuery} aria-label="Cari pengguna" placeholder="Cari nama atau username…" />
+      <button type="submit" class="btn btn-secondary">Cari</button>
+    </form>
+    <div class="filter-controls">
+      <label class="sr-only" for="admin-role-filter">Filter role</label>
+      <select id="admin-role-filter" bind:value={roleFilter} onchange={() => fetchUsers(1)}>
+        <option value="">Semua Role</option>
+        <option value="User">User</option>
+        <option value="IT Staff">IT Staff</option>
+        <option value="Super Admin">Super Admin</option>
+      </select>
+      <label class="sr-only" for="admin-status-filter">Filter status akun</label>
+      <select id="admin-status-filter" bind:value={statusFilter} onchange={() => fetchUsers(1)}>
+        <option value="">Semua Status</option>
+        <option value="active">Aktif</option>
+        <option value="inactive">Nonaktif</option>
+      </select>
+      {#if searchQuery.trim() || roleFilter || statusFilter}
+        <button type="button" class="btn btn-secondary" onclick={resetFilters}>Reset</button>
+      {/if}
+    </div>
+  </div>
+
   {#if errorMessage}
     <div class="alert alert-error" role="alert">{errorMessage}</div>
   {/if}
@@ -233,6 +279,13 @@
                         <circle cx="12" cy="12" r="9" /><polyline points="8 12 11 15 16 9" />
                       </svg>
                     {/if}
+                  </button>
+                {:else}
+                  <button type="button" class="btn-protected" title="Akun Super Admin dilindungi" aria-label="Akun Super Admin dilindungi" disabled>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <rect x="4" y="10" width="16" height="11" rx="2" />
+                      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                    </svg>
                   </button>
                 {/if}
               </td>
@@ -439,6 +492,34 @@
     margin-bottom: 8px;
   }
 
+  .toolbar,
+  .filter-controls,
+  .search-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar {
+    justify-content: space-between;
+  }
+
+  .search-form {
+    flex: 1;
+    min-width: 280px;
+    max-width: 480px;
+  }
+
+  .search-form input {
+    flex: 1;
+  }
+
+  .filter-controls select {
+    width: auto;
+    min-width: 150px;
+  }
+
   .pagination-bar {
     display: flex;
     align-items: center;
@@ -551,7 +632,8 @@
   }
 
   .btn-reset-pw,
-  .btn-toggle {
+  .btn-toggle,
+  .btn-protected {
     width: 40px;
     min-width: 40px;
     min-height: 40px;
@@ -561,6 +643,13 @@
     justify-content: center;
     border-radius: var(--radius-sm);
     cursor: pointer;
+  }
+
+  .btn-protected {
+    border: 1px solid var(--color-border);
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    opacity: 0.7;
   }
 
   .btn-disable {
