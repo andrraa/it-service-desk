@@ -146,9 +146,7 @@
 <div class="admin-container">
   <div class="page-heading">
     <div>
-      <p class="eyebrow">PANEL SUPER ADMIN</p>
       <h1>Manajemen Pengguna</h1>
-      <p class="page-description">Kelola akun pengguna dan staf IT.</p>
     </div>
     <button type="button" class="btn btn-primary btn-add-staff" onclick={() => { showCreateModal = true; createdTempPassword = ''; createError = ''; }}>
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
