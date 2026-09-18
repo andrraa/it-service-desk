@@ -89,6 +89,10 @@
     }
   }
 
+  function getShortName(name: string) {
+    return name.trim().split(/\s+/).slice(0, 2).join(' ');
+  }
+
   onMount(() => {
     void checkAuth();
 
@@ -284,8 +288,11 @@
               <path d="M4 21a8 8 0 0 1 16 0" />
             </svg>
             <div class="user-profile-info">
-              <span class="user-display-name" title={currentUser.fullName || currentUser.username}>
+              <span class="user-display-name user-name-full" title={currentUser.fullName || currentUser.username}>
                 {currentUser.fullName || currentUser.username}
+              </span>
+              <span class="user-display-name user-name-short" title={currentUser.fullName || currentUser.username}>
+                {getShortName(currentUser.fullName || currentUser.username)}
               </span>
             </div>
           </div>

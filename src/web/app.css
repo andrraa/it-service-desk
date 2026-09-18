@@ -600,6 +600,10 @@ dialog::backdrop {
   white-space: nowrap;
 }
 
+.user-name-short {
+  display: none;
+}
+
 .btn-logout {
   display: flex;
   align-items: center;
@@ -809,8 +813,13 @@ dialog::backdrop {
     display: none;
   }
 
-  .topbar-profile .user-profile-info {
+  .topbar-profile .user-name-full {
     display: none;
+  }
+
+  .topbar-profile .user-name-short {
+    display: block;
+    max-width: 120px;
   }
 
   .btn-mobile-menu svg {
