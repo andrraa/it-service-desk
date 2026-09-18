@@ -204,22 +204,22 @@
   <div class="summary-strip" aria-label="Ringkasan Antrean">
     <div class="summary-item">
       <span class="summary-label">Tiket Open</span>
-      <strong class="summary-val tabular-nums">{summary ? summary.openCount : '—'}</strong>
+      <strong class="summary-val tabular-nums">{summary ? summary.openCount : '…'}</strong>
       <span class="summary-sub">Menunggu diambil</span>
     </div>
     <div class="summary-item">
       <span class="summary-label">In Progress</span>
-      <strong class="summary-val tabular-nums">{summary ? summary.inProgressCount : '—'}</strong>
+      <strong class="summary-val tabular-nums">{summary ? summary.inProgressCount : '…'}</strong>
       <span class="summary-sub">Sedang ditangani</span>
     </div>
     <div class="summary-item summary-critical">
       <span class="summary-label">Aktif Critical</span>
-      <strong class="summary-val tabular-nums">{summary ? summary.criticalActiveCount : '—'}</strong>
+      <strong class="summary-val tabular-nums">{summary ? summary.criticalActiveCount : '…'}</strong>
       <span class="summary-sub">Urgensi tertinggi</span>
     </div>
     <div class="summary-item">
       <span class="summary-label">Closed Hari Ini</span>
-      <strong class="summary-val tabular-nums">{summary ? summary.closedTodayCount : '—'}</strong>
+      <strong class="summary-val tabular-nums">{summary ? summary.closedTodayCount : '…'}</strong>
       <span class="summary-sub">Telah diselesaikan</span>
     </div>
   </div>
@@ -244,7 +244,7 @@
 
     <div class="filter-controls">
       <div class="filter-item">
-        <label for="queue-assignee" class="sr-only">Penanggung Jawab</label>
+        <label for="queue-assignee" class="sr-only">PIC</label>
         <select id="queue-assignee" bind:value={assignee} onchange={() => fetchDashboardData(1)}>
           <option value="">Semua Petugas</option>
           {#each assignees as person}
@@ -324,7 +324,7 @@
             <th scope="col">Pelapor</th>
             <th scope="col">Prioritas</th>
             <th scope="col">Status</th>
-            <th scope="col">Penanggung Jawab</th>
+            <th scope="col">PIC</th>
             <th scope="col">Waktu & Usia</th>
             <th scope="col">Aksi</th>
           </tr>
@@ -344,7 +344,6 @@
               </td>
               <td>
                 <span class="user-text"><strong>{ticket.creatorUsername}</strong></span>
-                <span class="user-sub tabular-nums">{ticket.creatorNik}</span>
               </td>
               <td>
                 <span class="badge-priority priority-{ticket.priority.toLowerCase()}">
@@ -360,7 +359,7 @@
                 {#if ticket.assigneeId === currentUser.id}
                   <strong>{ticket.assigneeUsername} (Saya)</strong>
                 {:else}
-                  {ticket.assigneeUsername || '— Belum diambil —'}
+                  {ticket.assigneeUsername || 'Belum diambil'}
                 {/if}
               </td>
               <td>
@@ -370,6 +369,13 @@
                 </div>
               </td>
               <td class="cell-actions">
+                <a
+                  href={`/tickets/${ticket.ticketNumber}`}
+                  class="btn btn-secondary btn-sm"
+                  onclick={(e) => handleOpenTicket(e, ticket)}
+                >
+                  Detail
+                </a>
                 {#if ticket.status === 'Open' && !ticket.assigneeId}
                   <button
                     type="button"
@@ -418,7 +424,7 @@
           <div class="card-details-grid">
             <div class="detail-pair">
               <span class="label">Pelapor:</span>
-              <span><strong>{ticket.creatorUsername}</strong> ({ticket.creatorNik})</span>
+              <span><strong>{ticket.creatorUsername}</strong></span>
             </div>
             <div class="detail-pair">
               <span class="label">PJ:</span>
@@ -431,6 +437,13 @@
           </div>
 
           <div class="card-actions-row">
+            <a
+              href={`/tickets/${ticket.ticketNumber}`}
+              class="btn btn-secondary"
+              onclick={(e) => handleOpenTicket(e, ticket)}
+            >
+              Lihat Detail
+            </a>
             {#if ticket.status === 'Open' && !ticket.assigneeId}
               <button
                 type="button"
@@ -485,7 +498,7 @@
     >
       <h2 id="modal-prio-title">Koreksi Tingkat Prioritas</h2>
       <p class="field-hint" style="margin-top: 4px;">
-        Tiket: <strong class="tabular-nums">{ticketToReprioritize.ticketNumber}</strong> — {ticketToReprioritize.title}
+        Tiket: <strong class="tabular-nums">{ticketToReprioritize.ticketNumber}</strong>: {ticketToReprioritize.title}
       </p>
 
       {#if reprioritizeError}
@@ -498,10 +511,10 @@
         <div class="form-group">
           <label for="queue-prio-select">Prioritas Baru</label>
           <select id="queue-prio-select" bind:value={newPriority} disabled={isUpdatingPriority}>
-            <option value="Critical">Critical — Layanan penting berhenti</option>
-            <option value="High">High — Pekerjaan utama terhambat</option>
-            <option value="Medium">Medium — Kendala mengganggu, ada alternatif</option>
-            <option value="Low">Low — Gangguan ringan / tidak mendesak</option>
+            <option value="Critical">Critical: Layanan penting berhenti</option>
+            <option value="High">High: Pekerjaan utama terhambat</option>
+            <option value="Medium">Medium: Kendala mengganggu, ada alternatif</option>
+            <option value="Low">Low: Gangguan ringan / tidak mendesak</option>
           </select>
         </div>
 
@@ -581,7 +594,7 @@
   }
 
   .summary-critical {
-    background-color: var(--color-danger-bg);
+    box-shadow: inset 0 3px 0 var(--color-danger);
   }
 
   .summary-critical .summary-val {
@@ -636,8 +649,8 @@
     pointer-events: none;
   }
 
-  .search-input-wrapper input {
-    padding-left: 36px;
+  .search-input-wrapper input[type='search'] {
+    padding-left: 40px;
   }
 
   .filter-controls {
@@ -725,9 +738,12 @@
   }
 
   .cell-primary {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    display: table-cell;
+  }
+
+  .cell-primary .ticket-title {
+    display: block;
+    margin-top: 4px;
   }
 
   .ticket-number {
@@ -893,18 +909,27 @@
   }
 
   @media (max-width: 767px) {
+    .page-header {
+      align-items: flex-start;
+    }
     .search-form {
       max-width: none;
+      width: 100%;
     }
     .filter-controls {
       width: 100%;
+      display: grid;
+      grid-template-columns: 1fr;
+      align-items: stretch;
     }
-    .filter-item {
-      flex: 1;
-    }
-    .filter-item select {
+    .filter-item,
+    .filter-item select,
+    .filter-controls > .btn {
       width: 100%;
       min-width: 0;
+    }
+    .checkbox-label {
+      min-height: 44px;
     }
   }
 </style>

@@ -212,8 +212,9 @@
               <th scope="col">Nomor & Judul</th>
               <th scope="col">Prioritas</th>
               <th scope="col">Status</th>
-              <th scope="col">Penanggung Jawab</th>
+              <th scope="col">PIC</th>
               <th scope="col">Waktu Dibuat</th>
+              <th scope="col">Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -240,10 +241,15 @@
                   </span>
                 </td>
                 <td class="cell-muted">
-                  {ticket.assigneeUsername || '—'}
+                  {ticket.assigneeUsername || 'Belum diambil'}
                 </td>
                 <td class="cell-muted tabular-nums">
                   {new Date(ticket.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                </td>
+                <td>
+                  <a href={`/tickets/${ticket.ticketNumber}`} class="btn btn-secondary btn-sm detail-link">
+                    Lihat Detail
+                  </a>
                 </td>
               </tr>
             {/each}
@@ -272,9 +278,10 @@
               </a>
             </h2>
             <div class="card-meta">
-              <span>PJ: <strong>{ticket.assigneeUsername || '—'}</strong></span>
+              <span>PIC: <strong>{ticket.assigneeUsername || 'Belum diambil'}</strong></span>
               <span class="tabular-nums">{new Date(ticket.createdAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
             </div>
+            <a href={`/tickets/${ticket.ticketNumber}`} class="btn btn-secondary detail-link">Lihat Detail</a>
           </article>
         {/each}
       </div>
@@ -356,8 +363,8 @@
     pointer-events: none;
   }
 
-  .search-input-wrapper input {
-    padding-left: 36px;
+  .search-input-wrapper input[type='search'] {
+    padding-left: 40px;
   }
 
   .filter-controls {
@@ -444,9 +451,12 @@
   }
 
   .cell-primary {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    display: table-cell;
+  }
+
+  .cell-primary .ticket-title {
+    display: block;
+    margin-top: 4px;
   }
 
   .ticket-number {
@@ -466,6 +476,18 @@
   .ticket-title:hover {
     color: var(--color-link);
     text-decoration: underline;
+  }
+
+  .detail-link {
+    display: inline-flex;
+    width: max-content;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .ticket-card .detail-link {
+    width: 100%;
+    margin-top: 4px;
   }
 
   .cell-muted {
