@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: it_service_desk_prod
+    container_name: it-service-desk-prod
     restart: always
     ports:
       - "3000:3000"
@@ -20,7 +20,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: it_service_desk_prod_db
+    container_name: it-service-desk-prod-db
     restart: always
     environment:
       POSTGRES_USER: it_service_desk

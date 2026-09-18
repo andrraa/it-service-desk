@@ -65,12 +65,12 @@ docker compose -f docker-compose.prod.yml down
 
 ### A. Backup Database PostgreSQL dari Container
 ```bash
-docker exec -t it_service_desk_prod_db pg_dump -U it_service_desk -d it_service_desk -Fc > backup_db_$(date +%Y%m%d_%H%M%S).dump
+docker exec -t it-service-desk-prod-db pg_dump -U it_service_desk -d it_service_desk -Fc > backup_db_$(date +%Y%m%d_%H%M%S).dump
 ```
 
 ### B. Restore Database ke Container
 ```bash
-docker exec -i it_service_desk_prod_db pg_restore -U it_service_desk -d it_service_desk --clean --if-exists < backup_db_YYYYMMDD.dump
+docker exec -i it-service-desk-prod-db pg_restore -U it_service_desk -d it_service_desk --clean --if-exists < backup_db_YYYYMMDD.dump
 ```
 
 ### C. Backup Volume Lampiran Privat
