@@ -65,7 +65,7 @@
   padding: 0;
 }
 
-html, body {
+html, body, #app {
   min-height: 100%;
   background-color: var(--color-bg);
   color: var(--color-text);
@@ -410,6 +410,7 @@ dialog::backdrop {
 /* App Layout: Unauthenticated */
 .unauth-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg);
@@ -427,11 +428,11 @@ dialog::backdrop {
 }
 
 .unauth-main {
-  flex: 1;
+  flex: 1 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 16px;
+  padding: 40px 16px 60px;
 }
 
 /* App Layout: Authenticated */
