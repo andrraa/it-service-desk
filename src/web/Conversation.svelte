@@ -155,7 +155,7 @@
     <h2 id="chat-heading">Ruang Chat</h2>
     <span class="chat-status-indicator">
       <span class="status-dot" class:active={!isClosed}></span>
-      {isClosed ? 'Tiket Closed' : 'Pembaruan otomatis'}
+      {isClosed ? 'Tiket Closed' : 'Percakapan aktif'}
     </span>
   </div>
 
