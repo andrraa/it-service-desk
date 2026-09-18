@@ -388,6 +388,10 @@ label {
   border-color: var(--color-info);
 }
 
+.auth-card > .alert {
+  margin-bottom: 20px;
+}
+
 /* Shared Loading State */
 .loading-state {
   min-height: 160px;
