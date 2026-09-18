@@ -467,8 +467,7 @@
       {/each}
     </div>
 
-    {#if page > 1 || hasMore}
-      <nav class="pagination-bar" aria-label="Halaman antrean">
+    <nav class="pagination-bar" aria-label="Halaman antrean">
         <button
           type="button"
           class="btn btn-secondary"
@@ -486,8 +485,7 @@
         >
           Berikutnya
         </button>
-      </nav>
-    {/if}
+    </nav>
   {/if}
 
   <!-- Priority Correction Modal -->

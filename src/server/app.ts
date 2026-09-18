@@ -1289,14 +1289,20 @@ async function routeRequest(request: Request, ctx: AppContext) {
 
     if (request.method === 'GET') {
       try {
+        const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '10', 10) || 10));
+        const offset = (page - 1) * limit;
         const rows = await ctx.sql`
-          SELECT 
-            id, username, full_name AS "fullName", role, is_active AS "isActive", 
+          SELECT
+            id, username, full_name AS "fullName", role, is_active AS "isActive",
             must_change_password AS "mustChangePassword", created_at AS "createdAt"
           FROM users
           ORDER BY role ASC, created_at DESC
+          LIMIT ${limit} OFFSET ${offset}
         `;
-        return json({ users: rows });
+        const countRows = await ctx.sql`SELECT COUNT(*)::int AS count FROM users`;
+        const total = (countRows[0] as { count: number }).count;
+        return json({ users: rows, pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) } });
       } catch (err) {
         console.error('List users error:', err);
         return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil daftar pengguna.' } }, 500);

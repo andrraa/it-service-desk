@@ -5,6 +5,9 @@
   let users = $state<User[]>([]);
   let isLoading = $state(true);
   let errorMessage = $state('');
+  let page = $state(1);
+  let totalPages = $state(1);
+  let totalUsers = $state(0);
 
   // Create staff form
   let showCreateModal = $state(false);
@@ -25,14 +28,17 @@
   let issuedTempPassword = $state('');
   let isResetting = $state(false);
 
-  async function fetchUsers() {
+  async function fetchUsers(targetPage = page) {
     isLoading = true;
     errorMessage = '';
     try {
-      const res = await fetch('/api/admin/users');
+      const res = await fetch(`/api/admin/users?page=${targetPage}&limit=10`);
       if (!res.ok) throw new Error('Gagal memuat daftar pengguna.');
       const data: any = await res.json();
       users = data.users || [];
+      page = data.pagination?.page || 1;
+      totalPages = data.pagination?.totalPages || 1;
+      totalUsers = data.pagination?.total || 0;
     } catch {
       errorMessage = 'Tidak dapat memuat data staf/pengguna.';
     } finally {
@@ -235,6 +241,18 @@
         </tbody>
       </table>
     </div>
+
+    <nav class="pagination-bar" aria-label="Navigasi halaman pengguna">
+      <span class="pagination-info">Halaman {page} dari {totalPages} ({totalUsers} pengguna)</span>
+      <div class="pagination-actions">
+        <button type="button" class="btn btn-secondary" disabled={isLoading || page <= 1} onclick={() => fetchUsers(page - 1)}>
+          Sebelumnya
+        </button>
+        <button type="button" class="btn btn-secondary" disabled={isLoading || page >= totalPages} onclick={() => fetchUsers(page + 1)}>
+          Berikutnya
+        </button>
+      </div>
+    </nav>
   {/if}
 
   <!-- Modal Tambah IT Staff -->
@@ -419,6 +437,24 @@
 
   .btn-add-staff {
     margin-bottom: 8px;
+  }
+
+  .pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .pagination-info {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+  }
+
+  .pagination-actions {
+    display: flex;
+    gap: 8px;
   }
 
   .table-card {

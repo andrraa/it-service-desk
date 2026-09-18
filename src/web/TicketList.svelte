@@ -286,8 +286,7 @@
         {/each}
       </div>
 
-      {#if totalPages > 1}
-        <nav class="pagination-bar" aria-label="Navigasi halaman tiket">
+      <nav class="pagination-bar" aria-label="Navigasi halaman tiket">
           <span class="pagination-info">
             Halaman {page} dari {totalPages} ({totalTickets} tiket)
           </span>
@@ -309,8 +308,7 @@
               Berikutnya
             </button>
           </div>
-        </nav>
-      {/if}
+      </nav>
     {/if}
   {/if}
 </div>
