@@ -18,10 +18,6 @@
   let ticketAttachments = $state<any[]>([]);
   let isLoading = $state(true);
   let errorMessage = $state('');
-  let history = $state<{ id: string; action: string; actorUsername: string; createdAt: string; reason: string; oldValue: unknown; newValue: unknown }[]>([]);
-  let historyError = $state('');
-  let hasMoreHistory = $state(false);
-  let loadingHistory = $state(false);
 
   // Close modal
   let showCloseModal = $state(false);
@@ -45,25 +41,6 @@
     if (hours < 24) return `${hours} jam ${remainingMins} mnt`;
     const days = Math.floor(hours / 24);
     return `${days} hari ${hours % 24} jam`;
-  }
-
-  async function fetchHistory(reset = false) {
-    if (loadingHistory) return;
-    loadingHistory = true;
-    historyError = '';
-    try {
-      const url = new URL(`/api/tickets/${ticketId}/history`, window.location.origin);
-      if (!reset && history.length) url.searchParams.set('before', String(history.at(-1)!.id));
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Gagal memuat histori penanganan.');
-      const data = await response.json();
-      history = reset ? data.history : [...history, ...data.history];
-      hasMoreHistory = data.hasMore;
-    } catch (error) {
-      historyError = error instanceof Error ? error.message : 'Gagal memuat histori.';
-    } finally {
-      loadingHistory = false;
-    }
   }
 
   async function fetchTicketDetail() {
@@ -90,7 +67,6 @@
       } else {
         errorMessage = 'Gagal memuat berkas lampiran. Silakan muat ulang halaman.';
       }
-      await fetchHistory(true);
     } catch (err: any) {
       errorMessage = err.message || 'Terjadi kesalahan sistem.';
     } finally {
@@ -294,62 +270,6 @@
         />
       </div>
 
-      <!-- 6. History / Audit Activities (Details dropdown) -->
-      <section class="panel-section area-act" aria-labelledby="act-heading">
-        <details class="history-details">
-          <summary id="act-heading" class="history-summary">
-            <span>Aktivitas Penanganan</span>
-            <span class="history-count tabular-nums">({history.length})</span>
-          </summary>
-          <div class="history-content">
-            {#if historyError}
-              <div class="alert alert-error" role="alert">
-                <span>{historyError}</span>
-                <button type="button" class="btn-link" disabled={loadingHistory} onclick={() => fetchHistory(history.length === 0)}>
-                  Coba lagi
-                </button>
-              </div>
-            {/if}
-            <ol class="history-timeline">
-              {#each history as item}
-                <li class="timeline-item">
-                  <div class="timeline-header">
-                    <strong>{item.actorUsername}</strong>
-                    <span class="timeline-time tabular-nums">
-                      {new Date(item.createdAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}
-                    </span>
-                  </div>
-                  <p class="timeline-action">
-                    {({
-                      CLAIM_TICKET: 'Mengambil tiket untuk penanganan',
-                      CHANGE_PRIORITY: 'Mengubah tingkat prioritas',
-                      CLOSE_TICKET: 'Menutup tiket dengan solusi',
-                    } as Record<string, string>)[item.action] || item.action}
-                  </p>
-                  {#if item.oldValue || item.newValue}
-                    <p class="timeline-change">
-                      {JSON.stringify(item.oldValue)} &rarr; {JSON.stringify(item.newValue)}
-                    </p>
-                  {/if}
-                  {#if item.reason}
-                    <p class="timeline-reason">{item.reason}</p>
-                  {/if}
-                </li>
-              {/each}
-            </ol>
-            {#if hasMoreHistory}
-              <button
-                type="button"
-                class="btn btn-secondary btn-more-history"
-                disabled={loadingHistory}
-                onclick={() => fetchHistory()}
-              >
-                {loadingHistory ? 'Memuat…' : 'Muat aktivitas sebelumnya'}
-              </button>
-            {/if}
-          </div>
-        </details>
-      </section>
     </div>
   {/if}
 
@@ -363,7 +283,7 @@
     >
       <h2 id="modal-close-title">Dokumentasi Solusi & Penutupan Tiket</h2>
       <p class="field-hint" style="margin-top: 4px;">
-        Tiket: <strong class="tabular-nums">{ticket.ticketNumber}</strong> — {ticket.title}
+        Tiket: <strong class="tabular-nums">{ticket.ticketNumber}</strong>: {ticket.title}
       </p>
 
       {#if closeError}
@@ -421,10 +341,10 @@
         <div class="form-group">
           <label for="prio-select">Prioritas Baru</label>
           <select id="prio-select" bind:value={newPriority} disabled={isUpdatingPriority}>
-            <option value="Critical">Critical — Layanan penting berhenti</option>
-            <option value="High">High — Pekerjaan utama terhambat</option>
-            <option value="Medium">Medium — Kendala mengganggu, ada alternatif</option>
-            <option value="Low">Low — Gangguan ringan / tidak mendesak</option>
+            <option value="Critical">Critical: Layanan penting berhenti</option>
+            <option value="High">High: Pekerjaan utama terhambat</option>
+            <option value="Medium">Medium: Kendala mengganggu, ada alternatif</option>
+            <option value="Low">Low: Gangguan ringan / tidak mendesak</option>
           </select>
         </div>
 
@@ -498,11 +418,6 @@
   .area-sol {
     grid-column: 1;
     grid-row: 3;
-  }
-
-  .area-act {
-    grid-column: 1;
-    grid-row: 4;
   }
 
   .area-chat {
@@ -616,98 +531,6 @@
     gap: 8px;
   }
 
-  /* History Details */
-  .history-details summary {
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.95rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    user-select: none;
-    list-style: none;
-  }
-
-  .history-details summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .history-details summary::after {
-    content: '▾';
-    font-size: 1rem;
-    color: var(--color-text-muted);
-    transition: transform 0.15s ease;
-  }
-
-  .history-details[open] summary::after {
-    transform: rotate(180deg);
-  }
-
-  .history-count {
-    color: var(--color-text-muted);
-    font-weight: normal;
-    font-size: 0.8125rem;
-    margin-left: 6px;
-  }
-
-  .history-content {
-    margin-top: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .history-timeline {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .timeline-item {
-    padding: 10px 12px;
-    background-color: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: 0.8125rem;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .timeline-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .timeline-time {
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
-  }
-
-  .timeline-action {
-    font-weight: 500;
-    color: var(--color-text);
-  }
-
-  .timeline-change {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    font-family: monospace;
-  }
-
-  .timeline-reason {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    font-style: italic;
-  }
-
-  .btn-more-history {
-    align-self: center;
-  }
-
   /* Mobile <1024px: Single column with explicit order */
   @media (max-width: 1023px) {
     .detail-grid {
@@ -733,9 +556,6 @@
       position: static;
     }
 
-    .area-act {
-      order: 5;
-    }
 
     .meta-fields-grid {
       grid-template-columns: 1fr;

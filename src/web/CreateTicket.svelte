@@ -259,10 +259,10 @@
         bind:value={priority}
         disabled={isSubmitting || Boolean(createdTicket)}
       >
-        <option value="Low">Low — Gangguan ringan / tidak mendesak</option>
-        <option value="Medium">Medium — Kendala mengganggu, ada alternatif</option>
-        <option value="High">High — Pekerjaan utama terhambat</option>
-        <option value="Critical">Critical — Layanan penting berhenti total</option>
+        <option value="Low">Low: Gangguan ringan / tidak mendesak</option>
+        <option value="Medium">Medium: Kendala mengganggu, ada alternatif</option>
+        <option value="High">High: Pekerjaan utama terhambat</option>
+        <option value="Critical">Critical: Layanan penting berhenti total</option>
       </select>
       <span class="field-hint">Pilih prioritas sesuai dampak kendala terhadap pekerjaan Anda.</span>
     </div>
