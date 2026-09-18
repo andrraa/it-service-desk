@@ -166,7 +166,7 @@
         <div class="message-item" class:my-message={String(msg.senderId) === String(currentUser.id)}>
           <div class="message-meta-row">
             <span class="sender-name">
-              <strong>{msg.senderUsername}</strong>
+              <strong>{String(msg.senderId) === String(currentUser.id) ? 'Anda' : msg.senderUsername}</strong>
               <span class="badge-role badge-neutral">{msg.senderRole}</span>
             </span>
             <span class="message-time tabular-nums">
@@ -325,15 +325,20 @@
   .message-item {
     display: flex;
     flex-direction: column;
+    align-self: flex-start;
     gap: 6px;
+    width: min(85%, 560px);
     padding: 12px 16px;
     background-color: var(--color-bg);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 0;
   }
 
   .message-item.my-message {
-    border-left: 3px solid var(--color-primary);
+    align-self: flex-end;
+    background-color: var(--color-info-bg);
+    border-color: var(--color-info);
+    border-radius: var(--radius-md) var(--radius-md) 0 var(--radius-md);
   }
 
   .message-meta-row {
