@@ -271,21 +271,9 @@
           {:else if currentRoute.view === 'password'}
             <span class="topbar-title">Ganti Password</span>
           {:else if currentRoute.view === 'tickets-new'}
-            <nav aria-label="Breadcrumb">
-              <ol class="nav-breadcrumb">
-                <li><a href="/tickets">Tiket Saya</a></li>
-                <li aria-hidden="true">/</li>
-                <li aria-current="page"><strong>Buat Tiket</strong></li>
-              </ol>
-            </nav>
+            <span class="topbar-title">Buat Tiket</span>
           {:else if currentRoute.view === 'ticket-detail'}
-            <nav aria-label="Breadcrumb">
-              <ol class="nav-breadcrumb">
-                <li><a href="/tickets">Tiket Saya</a></li>
-                <li aria-hidden="true">/</li>
-                <li aria-current="page"><strong class="tabular-nums">{currentRoute.ticketNumber}</strong></li>
-              </ol>
-            </nav>
+            <span class="topbar-title">Detail Tiket</span>
           {/if}
         </div>
 

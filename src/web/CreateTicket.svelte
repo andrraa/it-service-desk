@@ -219,6 +219,14 @@
 </script>
 
 <div class="create-ticket-view">
+  <nav class="content-breadcrumb" aria-label="Breadcrumb">
+    <ol class="nav-breadcrumb">
+      <li><a href="/tickets">Tiket Saya</a></li>
+      <li aria-hidden="true">/</li>
+      <li aria-current="page"><strong>Buat Tiket</strong></li>
+    </ol>
+  </nav>
+
   <div class="form-header">
     <h1>Buat Tiket</h1>
     <p class="form-instructions">Sampaikan laporan kendala IT secara rinci agar tim penanganan dapat segera menindaklanjuti.</p>
