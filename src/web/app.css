@@ -564,8 +564,8 @@ dialog::backdrop {
   padding-top: 16px;
   border-top: 1px solid var(--color-border);
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
 }
 
 .user-profile {
@@ -623,12 +623,19 @@ dialog::backdrop {
 
 .sidebar-theme-wrapper {
   display: flex;
-  width: 100%;
 }
 
 .sidebar-theme-wrapper .theme-toggle {
-  width: 100%;
-  justify-content: center;
+  width: 44px;
+  padding: 0;
+}
+
+.sidebar-theme-wrapper .theme-toggle span {
+  display: none;
+}
+
+.sidebar-user .btn-logout {
+  flex: 1;
 }
 
 /* Workspace Area */

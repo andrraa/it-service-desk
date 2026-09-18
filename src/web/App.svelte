@@ -227,7 +227,6 @@
       </nav>
 
       <div class="sidebar-user">
-        <!-- Theme Toggle positioned above Logout -->
         <div class="sidebar-theme-wrapper">
           <ThemeToggle />
         </div>
