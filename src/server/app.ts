@@ -360,18 +360,18 @@ async function routeRequest(request: Request, ctx: AppContext) {
   }
 
   // Authentication Helper for Protected Routes
-  const getAuthUser = async (): Promise<User | null> => {
+  const getAuthUser = async (allowPasswordChange = false): Promise<User | null> => {
     const cookies = parseCookies(request.headers.get('Cookie'));
     const sessionId = cookies.session_id;
     if (!sessionId) return null;
     const user = await getSessionUser(ctx.sql, sessionId);
-    if (user?.mustChangePassword) throw new RequestError(403, 'PASSWORD_CHANGE_REQUIRED', 'Ganti password sebelum mengakses fitur ini.');
+    if (user?.mustChangePassword && !allowPasswordChange) throw new RequestError(403, 'PASSWORD_CHANGE_REQUIRED', 'Ganti password sebelum mengakses fitur ini.');
     return user;
   };
 
   // Change Password Endpoint: POST /api/auth/change-password
   if (pathname === '/api/auth/change-password') {
-    const user = await getAuthUser();
+    const user = await getAuthUser(true);
     if (!user) {
       return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
     }

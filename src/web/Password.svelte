@@ -69,17 +69,11 @@
   }
 </script>
 
+<div class="password-view">
 <div class="password-card">
   <div class="password-header">
-    <p class="eyebrow">KEAMANAN AKUN</p>
-    <h2>{currentUser.mustChangePassword ? 'Wajib Mengganti Password' : 'Ganti Password Akun'}</h2>
-    <p class="password-sub">
-      {#if currentUser.mustChangePassword}
-        Akun Anda menggunakan password sementara. Demi keamanan, Anda diwajibkan membuat password baru permanen sebelum dapat mengakses fitur lain.
-      {:else}
-        Perbarui password akun Anda secara berkala untuk menjaga kerahasiaan akses workspace.
-      {/if}
-    </p>
+    <h1>Ganti Password</h1>
+    <p class="password-sub">{currentUser.mustChangePassword ? 'Buat password baru untuk melanjutkan.' : 'Masukkan password lama dan password baru.'}</p>
   </div>
 
   {#if generalError}
@@ -143,15 +137,21 @@
     </button>
   </form>
 </div>
+</div>
 
 <style>
+  .password-view {
+    min-height: 100%;
+    display: grid;
+    place-items: center;
+  }
+
   .password-card {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: 28px;
-    max-width: 480px;
-    margin: 0 auto;
+    width: min(100%, 440px);
   }
 
   .password-header {
