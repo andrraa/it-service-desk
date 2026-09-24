@@ -67,27 +67,32 @@ Setiap tiket baru mengirim satu pesan ke chat/grup Telegram. Fitur ini **opsiona
 
 ### A. Menyiapkan Bot & Chat ID
 1. Chat `@BotFather` di Telegram → `/newbot` → simpan token (`<bot_id>:<secret>`).
-2. Tambahkan bot ke grup tujuan (atau kirim `/start` ke bot untuk chat pribadi).
+2. Tambahkan bot ke grup tujuan (atau kirim `/start` ke bot untuk chat pribadi). Pada grup forum, pastikan bot adalah admin grup agar dapat menulis ke topic.
 3. Ambil chat id dari `@userinfobot` (grup biasanya berawalan `-100...`).
+4. Untuk grup forum dengan topic, ambil **thread id** topik tujuan: klik kanan topic → **Copy Link**. Format tautannya `https://t.me/c/<chat_id_internal>/<thread_id>`, mis. `t.me/c/1234567890123/45` → chat id `-1001234567890123`, thread id `45`.
 
 ### B. Konfigurasi Environment
 | Variabel | Wajib | Keterangan |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | dengan `TELEGRAM_CHAT_ID` | Token bot dari BotFather. |
 | `TELEGRAM_CHAT_ID` | dengan `TELEGRAM_BOT_TOKEN` | Satu atau beberapa chat id (pisahkan koma), mis. `-1001234567890,@channelname`. |
+| `TELEGRAM_THREAD_ID` | opsional | Id topic pada grup forum (mis. `45`). Kosongkan untuk chat biasa. |
 | `APP_URL` | opsional | Basis URL publik, dipakai untuk tautan buka tiket di pesan. |
 
 Setel di `.env` lalu jalankan ulang container:
 ```bash
 # .env
 TELEGRAM_BOT_TOKEN=123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw
-TELEGRAM_CHAT_ID=-1001234567890
+TELEGRAM_CHAT_ID=-1001234567890123
+TELEGRAM_THREAD_ID=45
 APP_URL=https://itsd.internal.example.com
 
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Jika hanya salah satu variabel diisi atau formatnya salah, server menolak start dengan pesan konfigurasi yang jelas (fail-fast), bukan mengirim notifikasi ke alamat yang salah.
+Jika `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` tidak lengkap atau formatnya salah, server menolak start dengan pesan konfigurasi yang jelas (fail-fast), bukan mengirim notifikasi ke alamat yang salah. `TELEGRAM_THREAD_ID` bersifat opsional; isi hanya bila grup memakai topic.
+
+Semua chat id pada `TELEGRAM_CHAT_ID` menerima pesan di topic yang sama bila `TELEGRAM_THREAD_ID` diisi. Untuk mengirim topic berbeda per chat atau per kategori tiket, jalankan instance/konfigurasi terpisah.
 
 ### C. Format Pesan & Perilaku
 ```
@@ -108,11 +113,15 @@ TKT-000123 · Printer <lantai 2> tidak bisa print
 ```bash
 # Cek konfigurasi terbaca (tidak menulis pesan)
 docker exec it-service-desk-prod sh -c 'echo ${TELEGRAM_CHAT_ID}'
+# Uji kirim manual ke chat/topic (tanpa menunggu tiket baru)
+bun run scripts/telegram-smoke.ts <botToken> <chatId> [threadId]
 # Log kegagalan pengiriman
 docker logs it-service-desk-prod | grep -i telegram
 ```
 - `Telegram notify failed ... HTTP 401` → token salah.
 - `HTTP 400 ... chat not found` → bot belum ditambahkan ke grup/chat id salah.
+- `HTTP 400 ... message thread not found` → `TELEGRAM_THREAD_ID` salah, atau topic/grup berubah. Ambil ulang thread id dari menu "Copy Link" topic.
+- `HTTP 403 ... not enough rights` → jadikan bot admin grup agar dapat menulis ke topic.
 - `HTTP 429` → rate limit; dikirim ulang otomatis, turunkan frekuensi grup bila sering terjadi.
 
 ---

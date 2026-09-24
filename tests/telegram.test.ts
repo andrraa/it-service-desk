@@ -101,6 +101,12 @@ test('config: telegram is optional and validated when present', () => {
   expect(readTelegramConfig({ TELEGRAM_BOT_TOKEN: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw', TELEGRAM_CHAT_ID: '-1001234567890, -1009876543210' })?.chatIds)
     .toEqual(['-1001234567890', '-1009876543210']);
 
+  expect(readTelegramConfig({ TELEGRAM_BOT_TOKEN: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw', TELEGRAM_CHAT_ID: '-1001234567890', TELEGRAM_THREAD_ID: '45' })?.threadId).toBe(45);
+  expect(readTelegramConfig({ TELEGRAM_BOT_TOKEN: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw', TELEGRAM_CHAT_ID: '-1001234567890', TELEGRAM_THREAD_ID: ' 45 ' })?.threadId).toBe(45);
+  for (const badThread of ['0', '-1', 'abc', '4.5'])
+    expect(() => readTelegramConfig({ TELEGRAM_BOT_TOKEN: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw', TELEGRAM_CHAT_ID: '-1001234567890', TELEGRAM_THREAD_ID: badThread }))
+      .toThrow('TELEGRAM_THREAD_ID');
+
   expect(() => readTelegramConfig({ TELEGRAM_BOT_TOKEN: 'not-a-token', TELEGRAM_CHAT_ID: '-1001234567890' }))
     .toThrow('TELEGRAM_BOT_TOKEN');
   expect(() => readTelegramConfig({ TELEGRAM_BOT_TOKEN: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw' }))
@@ -141,6 +147,16 @@ test('notifier: one sendMessage per chat, HTML payload, no retry after 4xx', asy
   expect(calls[0]!.url).toBe('https://api.telegram.org/bot123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw/sendMessage');
   expect(calls[0]!.body).toMatchObject({ chat_id: '-1001234567890', parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
   expect(calls[1]!.body.chat_id).toBe('-1002');
+
+  // Topic of a forum group: Telegram needs message_thread_id on every send.
+  const topicCalls: any[] = [];
+  const topicNotifier = createTelegramNotifier(
+    { token: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw', chatIds: ['-1001234567890'], threadId: 45 },
+    { fetchImpl: (async (_url: string, init: any) => { topicCalls.push(JSON.parse(init.body)); return new Response('{"ok":true}', { status: 200 }); }) as unknown as typeof fetch },
+  );
+  await topicNotifier.notifyNewTicket(ticket);
+  await topicNotifier.close();
+  expect(topicCalls[0].message_thread_id).toBe(45);
 
   let attempts = 0;
   const rejected = createTelegramNotifier(

@@ -1,6 +1,8 @@
 export interface TelegramConfig {
   token: string;
   chatIds: string[];
+  /** Forum group topic (message thread) to post into; omit for non-forum chats. */
+  threadId?: number;
 }
 
 export interface NewTicketNotification {
@@ -48,7 +50,15 @@ export function readTelegramConfig(env: Record<string, string | undefined>): Tel
       throw new Error(`TELEGRAM_CHAT_ID "${chatId}" tidak valid (gunakan numeric chat id atau @channelusername).`);
     }
   }
-  return { token, chatIds };
+
+  // Topic (message thread) of a forum group. Find it via "Copy Link" on the topic:
+  // https://t.me/c/<internal_chat_id>/<thread_id> - the last number is the thread id.
+  const threadIdRaw = env.TELEGRAM_THREAD_ID?.trim() ?? '';
+  if (threadIdRaw && !/^[1-9]\d*$/.test(threadIdRaw)) {
+    throw new Error('TELEGRAM_THREAD_ID harus berupa bilangan bulat positif (id topic di grup forum).');
+  }
+
+  return { token, chatIds, threadId: threadIdRaw ? Number(threadIdRaw) : undefined };
 }
 
 export function escapeHtml(value: string): string {
@@ -103,6 +113,7 @@ export function createTelegramNotifier(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: chatId,
+            ...(config.threadId ? { message_thread_id: config.threadId } : {}),
             text,
             parse_mode: 'HTML',
             link_preview_options: { is_disabled: true },

@@ -63,13 +63,14 @@ Notifikasi Telegram bersifat opsional: setel `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_
 Setiap tiket baru dapat dikirim otomatis ke satu atau beberapa chat Telegram. Fitur ini opsional dan tidak memengaruhi pembuatan tiket: notifikasi dikirim secara asynchronous, dan kegagalan pengiriman hanya tercatat di log.
 
 1. Chat `@BotFather` → `/newbot` → simpan token.
-2. Tambahkan bot ke grup tujuan, lalu ambil chat id dari `@userinfobot`.
+2. Tambahkan bot ke grup tujuan (jadikan admin bila grup memakai topic), lalu ambil chat id dari `@userinfobot`.
 3. Setel environment berikut:
 
 | Variabel | Wajib | Keterangan |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | dengan `TELEGRAM_CHAT_ID` | Token bot dari BotFather (`<bot_id>:<secret>`). |
 | `TELEGRAM_CHAT_ID` | dengan `TELEGRAM_BOT_TOKEN` | Satu atau beberapa chat id, dipisahkan koma. |
+| `TELEGRAM_THREAD_ID` | opsional | Id topic pada grup forum; kosongkan untuk chat biasa. |
 | `APP_URL` | opsional | Basis URL publik untuk tautan buka tiket pada pesan. |
 
 Pesan yang dikirim memuat nomor tiket, judul, pelapor, waktu (WIB), deskripsi singkat, dan tautan ke tiket. Judul dipotong 120 karakter dan deskripsi 300 karakter. Gagal jaringan/HTTP 5xx/429 dicoba maksimal 3 kali; HTTP 4xx tidak diulang.
@@ -77,8 +78,10 @@ Pesan yang dikirim memuat nomor tiket, judul, pelapor, waktu (WIB), deskripsi si
 Uji konfigurasi tanpa menunggu tiket baru:
 
 ```bash
-bun run scripts/telegram-smoke.ts <botToken> <chatId>
+bun run scripts/telegram-smoke.ts <botToken> <chatId> [threadId]
 ```
+
+Untuk grup forum dengan topic, ambil thread id dari menu **Copy Link** topic (`t.me/c/1234567890123/45` → chat id `-1001234567890123`, thread id `45`).
 
 Panduan lengkap, format pesan, dan pemecahan masalah ada di [docs/operations.md](docs/operations.md#2-notifikasi-telegram-untuk-tiket-baru).
 
