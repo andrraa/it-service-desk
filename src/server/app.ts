@@ -33,6 +33,7 @@ import {
 import { MemoryRateLimiter } from './rate-limit';
 import { validateCsrf } from './csrf';
 import { notificationStream, publishNotification } from './notifications';
+import { readTelegramConfig, type TelegramNotifier } from './telegram';
 
 export function readConfig(env: Record<string, string | undefined>) {
   const databaseUrl = env.DATABASE_URL ?? '';
@@ -49,7 +50,12 @@ export function readConfig(env: Record<string, string | undefined>) {
   if (!/^\d+$/.test(rawPort) || !Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('PORT harus berupa bilangan bulat antara 1 dan 65535.');
   }
-  return { databaseUrl, port };
+  return {
+    databaseUrl,
+    port,
+    telegram: readTelegramConfig(env),
+    appUrl: env.APP_URL?.trim() ?? '',
+  };
 }
 
 export function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
@@ -69,6 +75,11 @@ export interface AppContext {
   sql: SQL;
   rateLimiter?: MemoryRateLimiter;
   clientAddress?: string; // Set from the socket by the server, never a request header.
+}
+
+export interface RequestOptions {
+  /** Optional outbound ticket notifier; omitted in tests and when Telegram is not configured. */
+  notifier?: TelegramNotifier;
 }
 
 const defaultAuthRateLimiter = new MemoryRateLimiter(5, 60 * 1000);
@@ -95,7 +106,7 @@ async function createMessageNotification(sql: any, ticketId: string, messageId: 
   `;
 }
 
-export async function handleRequest(request: Request, ctx: AppContext): Promise<Response> {
+export async function handleRequest(request: Request, ctx: AppContext, options: RequestOptions = {}): Promise<Response> {
   try {
     // Multipart has a larger server cap; all other bodies remain bounded, even when chunked.
     const upload = request.method === 'POST' && /^\/api\/tickets\/[^/]+\/attachments$/.test(new URL(request.url).pathname)
@@ -116,7 +127,7 @@ export async function handleRequest(request: Request, ctx: AppContext): Promise<
       }
       request = new Request(request, { body: Buffer.concat(chunks) });
     }
-    return await routeRequest(request, ctx);
+    return await routeRequest(request, ctx, options);
   } catch (error) {
     if (error instanceof RequestError) return json({ error: { code: error.code, message: error.message } }, error.status);
     console.error('Request failed:', error instanceof Error ? error.name : 'UnknownError');
@@ -142,7 +153,7 @@ async function lockActiveTicket(sql: SQL, id: string, user: User) {
   return ticket;
 }
 
-async function routeRequest(request: Request, ctx: AppContext) {
+async function routeRequest(request: Request, ctx: AppContext, options: RequestOptions = {}) {
   const url = new URL(request.url);
   const pathname = url.pathname;
   const rateLimiter = ctx.rateLimiter ?? defaultAuthRateLimiter;
@@ -1204,10 +1215,24 @@ async function routeRequest(request: Request, ctx: AppContext) {
             priority, 
             status, 
             created_at AS "createdAt", 
-            updated_at AS "updatedAt"
+            updated_at AS "updatedAt",
+            (xmax = 0) AS "isNew"
         `;
 
-        const newTicket = inserted[0] as Ticket;
+        const { isNew, ...newTicket } = inserted[0] as Ticket & { isNew: boolean };
+        // Idempotent replay (same requestId) must not notify twice.
+        if (isNew) {
+          void options.notifier?.notifyNewTicket({
+            ticketNumber: newTicket.ticketNumber,
+            title: newTicket.title,
+            description: newTicket.description,
+            priority: newTicket.priority,
+            creatorFullName: user.fullName || user.username,
+            creatorUsername: user.username,
+            createdAt: newTicket.createdAt,
+          }).catch((err) => console.error('Ticket notifier error:', err instanceof Error ? err.name : 'UnknownError'));
+        }
+
         return json({ message: 'Tiket berhasil dibuat.', ticket: newTicket }, 201);
       } catch (err) {
         console.error('Create ticket error:', err);

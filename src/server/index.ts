@@ -1,8 +1,10 @@
 import { SQL } from 'bun';
 import { join } from 'node:path';
 import { handleRequest, readConfig, MAX_REQUEST_BODY_SIZE } from './app';
+import { createTelegramNotifier } from './telegram';
 
 const config = readConfig(process.env);
+const notifier = config.telegram ? createTelegramNotifier(config.telegram, { appUrl: config.appUrl }) : undefined;
 // https://bun.com/docs/runtime/sql#connection-pooling
 const db = new SQL(config.databaseUrl, { max: 5, connectionTimeout: 2, idleTimeout: 30 });
 
@@ -14,7 +16,7 @@ const server = Bun.serve({
   fetch: async (request, server) => {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api')) {
-      return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' });
+      return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }, { notifier });
     }
 
     const distWeb = join(import.meta.dir, '../../dist/web');
@@ -36,6 +38,7 @@ console.info(`IT Service Desk API: ${server.url}`);
 
 async function shutdown() {
   await server.stop();
+  await notifier?.close();
   await db.close({ timeout: 3 });
 }
 process.once('SIGINT', shutdown);

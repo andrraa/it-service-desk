@@ -12,6 +12,9 @@ services:
       - DATABASE_URL=postgresql://it_service_desk:${POSTGRES_PASSWORD:-it_service_desk_prod_pass}@postgres:5432/it_service_desk
       - PORT=3000
       - UPLOADS_DIR=/app/storage/uploads
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - APP_URL=${APP_URL:-}
     volumes:
       - uploads_data:/app/storage/uploads
     depends_on:
