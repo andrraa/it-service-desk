@@ -16,6 +16,7 @@ Dokumentasi terkait:
 - Penutupan tiket dengan solusi wajib dan status Closed yang read-only.
 - Manajemen pengguna, staf IT, status akun, serta reset password oleh Super Admin.
 - Antarmuka responsif dengan Light Mode dan Dark Mode.
+- Notifikasi Telegram untuk tiket baru (opsional, lihat [panduan operasional](docs/operations.md#2-notifikasi-telegram-untuk-tiket-baru)).
 
 ## Teknologi
 
@@ -54,6 +55,32 @@ bun run dev:all
 ```
 
 `DATABASE_URL` wajib menunjuk PostgreSQL aplikasi. `TEST_DATABASE_URL` harus memakai database terpisah dengan nama berakhiran `_test`.
+
+Notifikasi Telegram bersifat opsional: setel `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` (lihat `.env.example`). Tanpa keduanya, aplikasi berjalan tanpa notifikasi.
+
+## Notifikasi Telegram untuk Tiket Baru
+
+Setiap tiket baru dapat dikirim otomatis ke satu atau beberapa chat Telegram. Fitur ini opsional dan tidak memengaruhi pembuatan tiket: notifikasi dikirim secara asynchronous, dan kegagalan pengiriman hanya tercatat di log.
+
+1. Chat `@BotFather` → `/newbot` → simpan token.
+2. Tambahkan bot ke grup tujuan, lalu ambil chat id dari `@userinfobot`.
+3. Setel environment berikut:
+
+| Variabel | Wajib | Keterangan |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | dengan `TELEGRAM_CHAT_ID` | Token bot dari BotFather (`<bot_id>:<secret>`). |
+| `TELEGRAM_CHAT_ID` | dengan `TELEGRAM_BOT_TOKEN` | Satu atau beberapa chat id, dipisahkan koma. |
+| `APP_URL` | opsional | Basis URL publik untuk tautan buka tiket pada pesan. |
+
+Pesan yang dikirim memuat nomor tiket, judul, pelapor, waktu (WIB), deskripsi singkat, dan tautan ke tiket. Judul dipotong 120 karakter dan deskripsi 300 karakter. Gagal jaringan/HTTP 5xx/429 dicoba maksimal 3 kali; HTTP 4xx tidak diulang.
+
+Uji konfigurasi tanpa menunggu tiket baru:
+
+```bash
+bun run scripts/telegram-smoke.ts <botToken> <chatId>
+```
+
+Panduan lengkap, format pesan, dan pemecahan masalah ada di [docs/operations.md](docs/operations.md#2-notifikasi-telegram-untuk-tiket-baru).
 
 ## Akun Super Admin Pertama
 
