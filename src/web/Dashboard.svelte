@@ -2,15 +2,19 @@
   import { onMount } from 'svelte';
   import { navigate } from './router';
   import { modal } from './modal';
+  import EmailTicketModal from './EmailTicketModal.svelte';
+  import { buildEmailDraft } from './emailDraft';
   import type { Ticket, TicketPriority } from '../server/tickets';
   import type { User } from '../server/auth';
 
   interface Props {
     currentUser: User;
+    /** True when the server has SMTP configured; the email action stays hidden otherwise. */
+    emailEnabled?: boolean;
     onSelectTicket?: (ticket: Ticket) => void;
   }
 
-  let { currentUser, onSelectTicket }: Props = $props();
+  let { currentUser, emailEnabled = false, onSelectTicket }: Props = $props();
 
   interface Summary {
     openCount: number;
@@ -169,6 +173,27 @@
     }
   }
 
+  // Email modal. The queue row only carries the summary, so the detail (and its
+  // resolution) is fetched on demand to build the draft.
+  let emailTicket = $state<Ticket | null>(null);
+  let emailDraft = $state({ subject: '', body: '' });
+  let emailError = $state('');
+
+  async function openEmailModal(ticket: Ticket, e: MouseEvent) {
+    e.stopPropagation();
+    emailError = '';
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}`);
+      if (!res.ok) throw new Error('Gagal memuat detail tiket.');
+      const data: any = await res.json();
+      const detail: Ticket = data.ticket ?? data;
+      emailDraft = buildEmailDraft(detail, { agentName: currentUser.fullName || currentUser.username });
+      emailTicket = detail;
+    } catch (err: any) {
+      emailError = err.message || 'Gagal memuat detail tiket.';
+    }
+  }
+
   function handleOpenTicket(e: MouseEvent, ticket: Ticket) {
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
@@ -306,6 +331,12 @@
     </div>
   {/if}
 
+  {#if emailError}
+    <div class="alert alert-error" role="alert">
+      <span>{emailError}</span>
+    </div>
+  {/if}
+
   {#if errorMessage}
     <div class="alert alert-error" role="alert">
       <span>{errorMessage}</span>
@@ -395,6 +426,15 @@
                       onclick={(e) => handleClaim(ticket, e)}
                     >
                       Ambil Tiket
+                    </button>
+                  {/if}
+                  {#if ticket.status === 'Closed' && emailEnabled}
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      onclick={(e) => void openEmailModal(ticket, e)}
+                    >
+                      Kirim Email
                     </button>
                   {/if}
                   <button
@@ -556,6 +596,16 @@
         </div>
       </form>
     </dialog>
+  {/if}
+
+  <!-- Email Ticket Modal (Closed tickets only) -->
+  {#if emailTicket}
+    <EmailTicketModal
+      ticketNumber={emailTicket.ticketNumber}
+      initialSubject={emailDraft.subject}
+      initialBody={emailDraft.body}
+      onClose={() => (emailTicket = null)}
+    />
   {/if}
 </div>
 

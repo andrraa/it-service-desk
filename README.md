@@ -17,6 +17,7 @@ Dokumentasi terkait:
 - Manajemen pengguna, staf IT, status akun, serta reset password oleh Super Admin.
 - Antarmuka responsif dengan Light Mode dan Dark Mode.
 - Notifikasi Telegram untuk tiket baru (opsional, lihat [panduan operasional](docs/operations.md#2-notifikasi-telegram-untuk-tiket-baru)).
+- Kirim tiket yang sudah ditutup ke email penerima (opsional, lihat [panduan operasional](docs/operations.md#3-kirim-tiket-via-email-opsional)).
 
 ## Teknologi
 
@@ -56,7 +57,24 @@ bun run dev:all
 
 `DATABASE_URL` wajib menunjuk PostgreSQL aplikasi. `TEST_DATABASE_URL` harus memakai database terpisah dengan nama berakhiran `_test`.
 
-Notifikasi Telegram bersifat opsional: setel `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` (lihat `.env.example`). Tanpa keduanya, aplikasi berjalan tanpa notifikasi.
+Notifikasi Telegram dan kirim email bersifat opsional (lihat `.env.example`). Tanpa `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` aplikasi berjalan tanpa notifikasi; tanpa `SMTP_HOST` tombol **Kirim Email** disembunyikan.
+
+## Kirim Tiket via Email
+
+Staf IT dan Super Admin dapat mengirim ringkasan tiket yang **sudah ditutup** ke email penerima. Penerima, subjek, dan isi pesan diisi manual lewat modal (subjek dan isi sudah terisi otomatis dari tiket dan solusinya, lalu bisa diubah). Pesan dikirim sebagai teks biasa tanpa lampiran, dan tidak muncul di percakapan tiket — hanya tercatat di audit log sebagai `SEND_EMAIL`.
+
+1. Siapkan relay SMTP perusahaan (host, port, kredensial, alamat pengirim).
+2. Setel environment berikut, lalu restart container:
+
+| Variabel | Wajib | Keterangan |
+|---|---|---|
+| `SMTP_HOST` | ya | Kosong = fitur email mati. |
+| `SMTP_PORT` | tidak | Default `587` (STARTTLS); `465` otomatis TLS. |
+| `SMTP_SECURE` | tidak | Menimpa tebakan dari port. |
+| `SMTP_USER` / `SMTP_PASSWORD` | tidak | Harus diisi bersamaan bila relay butuh autentikasi. |
+| `SMTP_FROM` | ya bila fitur aktif | Alamat pengirim, mis. `IT Service Desk <helpdesk@perusahaan.com>`. |
+
+3. Verifikasi: `docker logs it-service-desk-prod | grep -i mail`. Bila tombol tidak muncul, pastikan `SMTP_HOST` terbaca container.
 
 ## Notifikasi Telegram untuk Tiket Baru
 

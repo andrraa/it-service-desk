@@ -2,9 +2,11 @@ import { SQL } from 'bun';
 import { join } from 'node:path';
 import { handleRequest, readConfig, MAX_REQUEST_BODY_SIZE } from './app';
 import { createTelegramNotifier } from './telegram';
+import { createMailer } from './mailer';
 
 const config = readConfig(process.env);
 const notifier = config.telegram ? createTelegramNotifier(config.telegram, { appUrl: config.appUrl }) : undefined;
+const mailer = config.mailer ? createMailer(config.mailer) : undefined;
 // https://bun.com/docs/runtime/sql#connection-pooling
 const db = new SQL(config.databaseUrl, { max: 5, connectionTimeout: 2, idleTimeout: 30 });
 
@@ -16,7 +18,7 @@ const server = Bun.serve({
   fetch: async (request, server) => {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api')) {
-      return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }, { notifier });
+      return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }, { notifier, mailer });
     }
 
     const distWeb = join(import.meta.dir, '../../dist/web');
@@ -31,7 +33,7 @@ const server = Bun.serve({
       return new Response(indexHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
-    return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' });
+    return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }, { notifier, mailer });
   },
 });
 console.info(`IT Service Desk API: ${server.url}`);
@@ -39,6 +41,7 @@ console.info(`IT Service Desk API: ${server.url}`);
 async function shutdown() {
   await server.stop();
   await notifier?.close();
+  await mailer?.close();
   await db.close({ timeout: 3 });
 }
 process.once('SIGINT', shutdown);

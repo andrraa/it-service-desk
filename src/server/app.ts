@@ -34,6 +34,7 @@ import { MemoryRateLimiter } from './rate-limit';
 import { validateCsrf } from './csrf';
 import { notificationStream, publishNotification } from './notifications';
 import { readTelegramConfig, type TelegramNotifier } from './telegram';
+import { readMailerConfig, validateEmailInput, describeMailError, type Mailer } from './mailer';
 
 export function readConfig(env: Record<string, string | undefined>) {
   const databaseUrl = env.DATABASE_URL ?? '';
@@ -54,6 +55,7 @@ export function readConfig(env: Record<string, string | undefined>) {
     databaseUrl,
     port,
     telegram: readTelegramConfig(env),
+    mailer: readMailerConfig(env),
     appUrl: env.APP_URL?.trim() ?? '',
   };
 }
@@ -74,15 +76,20 @@ export function json(body: unknown, status = 200, extraHeaders: Record<string, s
 export interface AppContext {
   sql: SQL;
   rateLimiter?: MemoryRateLimiter;
+  emailRateLimiter?: MemoryRateLimiter;
   clientAddress?: string; // Set from the socket by the server, never a request header.
 }
 
 export interface RequestOptions {
   /** Optional outbound ticket notifier; omitted in tests and when Telegram is not configured. */
   notifier?: TelegramNotifier;
+  /** Optional SMTP mailer; omitted in tests and when SMTP is not configured. */
+  mailer?: Mailer;
 }
 
 const defaultAuthRateLimiter = new MemoryRateLimiter(5, 60 * 1000);
+// Email leaves the building: bound it per user so the endpoint cannot be used to spam.
+const defaultEmailRateLimiter = new MemoryRateLimiter(10, 60 * 1000);
 
 class RequestError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -157,6 +164,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
   const url = new URL(request.url);
   const pathname = url.pathname;
   const rateLimiter = ctx.rateLimiter ?? defaultAuthRateLimiter;
+  const emailRateLimiter = ctx.emailRateLimiter ?? defaultEmailRateLimiter;
 
   // CSRF validation on mutating requests
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
@@ -342,7 +350,8 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         });
       }
 
-      return json({ user });
+      // The email button only appears once SMTP is configured, so this flag is part of the session.
+      return json({ user, emailEnabled: Boolean(options.mailer) });
     } catch (err) {
       console.error('Session check error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan memeriksa sesi.' } }, 500);
@@ -985,6 +994,82 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     }
 
     return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'GET, POST' });
+  }
+
+  // Send ticket by email: POST /api/tickets/:id/email
+  const emailMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/email$/);
+  if (emailMatch) {
+    const ticketIdOrNumber = emailMatch[1];
+    const user = await getAuthUser();
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (user.role !== 'IT Staff' && user.role !== 'Super Admin') {
+      return json({ error: { code: 'FORBIDDEN', message: 'Hanya IT Staff atau Super Admin yang dapat mengirim email tiket.' } }, 403);
+    }
+    if (request.method !== 'POST') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'POST' });
+    }
+    if (!options.mailer) {
+      return json({ error: { code: 'EMAIL_DISABLED', message: 'Fitur email belum dikonfigurasi pada server ini.' } }, 503);
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+    }
+
+    const validation = validateEmailInput(body);
+    if (!validation.valid) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: 'Data email tidak valid.', details: validation.errors } }, 422);
+    }
+
+    try {
+      const ticketRows = await ctx.sql`
+        SELECT id, ticket_number AS "ticketNumber", title, status FROM tickets
+        WHERE id::text = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
+        LIMIT 1
+      `;
+      if (ticketRows.length === 0) {
+        return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
+      }
+      const ticket = ticketRows[0] as { id: number | string; ticketNumber: string; title: string; status: string };
+
+      // PRD: email is an artefact of a finished ticket, so unfinished tickets stay out.
+      if (ticket.status !== 'Closed') {
+        return json({ error: { code: 'TICKET_NOT_CLOSED', message: 'Email hanya dapat dikirim untuk tiket yang sudah ditutup.' } }, 403);
+      }
+
+      const rateCheck = emailRateLimiter.isAllowed(`email:${user.id}`);
+      if (!rateCheck.allowed) {
+        return json({ error: { code: 'RATE_LIMITED', message: `Terlalu banyak pengiriman email. Coba lagi dalam ${Math.ceil(rateCheck.retryAfterSeconds)} detik.` } }, 429, {
+          'Retry-After': String(Math.ceil(rateCheck.retryAfterSeconds)),
+        });
+      }
+
+      const { to, subject, body: messageBody } = validation.data;
+      try {
+        await options.mailer.send({ to, subject, body: messageBody });
+      } catch (err) {
+        // Never echo the raw SMTP error: it can leak relay hostnames and credentials hints.
+        console.error('Send ticket email error:', err instanceof Error ? err.message : 'UnknownError');
+        return json({ error: { code: 'EMAIL_SEND_FAILED', message: describeMailError(err) } }, 502);
+      }
+
+      // Audit keeps "who emailed whom about what ticket"; the body is not stored.
+      await ctx.sql`
+        INSERT INTO audit_logs (ticket_id, actor_id, action, new_value)
+        VALUES (${ticket.id}, ${user.id}, 'SEND_EMAIL', ${{ to, subject, ticketNumber: ticket.ticketNumber }})
+      `.catch((err) => console.error('Email audit log error:', err instanceof Error ? err.name : 'UnknownError'));
+
+      return json({ message: `Email berhasil dikirim ke ${to}.`, data: { to, subject, sentAt: new Date().toISOString() } });
+    } catch (err) {
+      if (err instanceof RequestError) throw err;
+      console.error('Send ticket email error:', err instanceof Error ? err.name : 'UnknownError');
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal memproses pengiriman email.' } }, 500);
+    }
   }
 
   // Upload Attachment: POST /api/tickets/:id/attachments

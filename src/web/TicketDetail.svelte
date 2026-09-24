@@ -3,16 +3,20 @@
   import { modal } from './modal';
   import Conversation from './Conversation.svelte';
   import Attachments from './Attachments.svelte';
+  import EmailTicketModal from './EmailTicketModal.svelte';
+  import { buildEmailDraft } from './emailDraft';
   import type { Ticket, TicketPriority } from '../server/tickets';
   import type { User } from '../server/auth';
 
   interface Props {
     ticketId: string;
     currentUser: User;
+    /** True when the server has SMTP configured; the email button stays hidden otherwise. */
+    emailEnabled?: boolean;
     onBack?: () => void;
   }
 
-  let { ticketId, currentUser, onBack }: Props = $props();
+  let { ticketId, currentUser, emailEnabled = false, onBack }: Props = $props();
 
   let ticket = $state<Ticket | null>(null);
   let ticketAttachments = $state<any[]>([]);
@@ -24,6 +28,16 @@
   let solutionText = $state('');
   let closeError = $state('');
   let isClosing = $state(false);
+
+  // Email modal (Closed tickets only, IT staff / admin)
+  let showEmailModal = $state(false);
+  let emailDraft = $state({ subject: '', body: '' });
+
+  function openEmailModal() {
+    if (!ticket) return;
+    emailDraft = buildEmailDraft(ticket, { agentName: currentUser.fullName || currentUser.username });
+    showEmailModal = true;
+  }
 
   // Priority modal (for IT staff / admin)
   let showPriorityModal = $state(false);
@@ -158,6 +172,16 @@
     </button>
 
     <div class="header-actions">
+      {#if ticket && ticket.status === 'Closed' && emailEnabled && (currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin')}
+        <button type="button" class="btn btn-secondary" onclick={openEmailModal}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="m22 6-10 7L2 6" />
+          </svg>
+          <span>Kirim Email</span>
+        </button>
+      {/if}
+
       {#if ticket && ticket.status !== 'Closed' && (currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin')}
         <button
           type="button"
@@ -316,6 +340,16 @@
         </div>
       </form>
     </dialog>
+  {/if}
+
+  <!-- Email Ticket Modal (Closed tickets only) -->
+  {#if showEmailModal && ticket}
+    <EmailTicketModal
+      ticketNumber={ticket.ticketNumber}
+      initialSubject={emailDraft.subject}
+      initialBody={emailDraft.body}
+      onClose={() => (showEmailModal = false)}
+    />
   {/if}
 
   <!-- Priority Correction Modal -->

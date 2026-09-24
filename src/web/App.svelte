@@ -14,6 +14,7 @@
   import type { User } from '../server/auth';
 
   let currentUser = $state<User | null>(null);
+  let emailEnabled = $state(false);
   let isCheckingAuth = $state(true);
   let currentRoute = $state<Route>({ view: 'login' });
   let isDrawerOpen = $state(false);
@@ -26,6 +27,7 @@
       if (res.ok) {
         const data: any = await res.json();
         currentUser = data.user;
+        emailEnabled = data.emailEnabled === true;
       } else {
         currentUser = null;
       }
@@ -322,6 +324,7 @@
         {:else if currentRoute.view === 'it-queue' && (currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin')}
           <Dashboard
             {currentUser}
+            {emailEnabled}
             onSelectTicket={(ticket) => navigate(`/tickets/${ticket.ticketNumber}`)}
           />
         {:else if currentRoute.view === 'tickets'}
@@ -339,6 +342,7 @@
           <TicketDetail
             ticketId={currentRoute.ticketNumber}
             currentUser={currentUser}
+            {emailEnabled}
             onBack={() => navigate(currentUser?.role === 'User' ? '/tickets' : '/it/queue')}
           />
         {/if}

@@ -13,7 +13,7 @@ function createMockSql(impl?: (query: string, ...args: any[]) => any): SQL {
 }
 
 test('configuration requires a complete PostgreSQL URL without leaking secrets', () => {
-  expect(readConfig({ DATABASE_URL: databaseUrl })).toEqual({ databaseUrl, port: 3000, telegram: null, appUrl: '' });
+  expect(readConfig({ DATABASE_URL: databaseUrl })).toEqual({ databaseUrl, port: 3000, telegram: null, mailer: null, appUrl: '' });
   for (const value of [undefined, '', 'not-a-url', 'sqlite://local.db', 'postgres://localhost/']) {
     expect(() => readConfig({ DATABASE_URL: value })).toThrow('DATABASE_URL');
   }

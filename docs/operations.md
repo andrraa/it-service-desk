@@ -142,7 +142,47 @@ docker logs it-service-desk-prod | grep -i telegram
 
 ---
 
-## 3. Prosedur Backup & Restore Data Container
+## 3. Kirim Tiket via Email (opsional)
+
+Staf IT / Super Admin dapat mengirim tiket yang **sudah ditutup** ke email penerima melalui tombol **Kirim Email** (tersedia di detail tiket dan kolom aksi antrean IT). Penerima, subjek, dan isi pesan diisi manual; subjek dan isi terisi otomatis dari tiket + solusinya dan bisa diedit sebelum dikirim. Pesan berupa teks biasa tanpa lampiran.
+
+### A. Konfigurasi
+```bash
+# /opt/it-service-desk/app/.env
+SMTP_HOST=relay.perusahaan.local
+SMTP_PORT=587
+SMTP_SECURE=            # kosongkan; 465 otomatis TLS
+SMTP_USER=helpdesk
+SMTP_PASSWORD=********
+SMTP_FROM="IT Service Desk <helpdesk@perusahaan.com>"
+```
+```bash
+docker compose -f docker-compose.prod.yml up -d   # tanpa --build; hanya environment
+```
+- `SMTP_HOST` kosong → fitur mati, tombol "Kirim Email" tidak dirender (flagnya ikut di `/api/auth/me`).
+- Konfigurasi setengah jalan (mis. `SMTP_USER` tanpa `SMTP_PASSWORD`, `SMTP_FROM` kosong, port tidak valid) → server **gagal start** dengan pesan jelas, bukan diam-diam tidak bisa mengirim.
+
+### B. Perilaku pengiriman
+- Pengiriman **synchronous**: respons API menunggu relay (timeout 10 s koneksi / 15 s socket), agar staf langsung tahu berhasil atau gagal.
+- Tanpa retry dan tanpa antrean; kegagalan dikembalikan sebagai `502 EMAIL_SEND_FAILED` dengan pesan yang bisa ditindaklanjuti (autentikasi ditolak, relay tak terjangkau, penerima ditolak).
+- Rate limit 10 email/menit per pengguna → `429` + `Retry-After`.
+- Guard: hanya peran `IT Staff`/`Super Admin` (403), hanya tiket `Closed` (403 `TICKET_NOT_CLOSED`), `to`/`subject` menolak karakter baris baru (anti header injection), subjek ≤ 200 dan isi ≤ 5000 karakter.
+- Audit log mencatat `SEND_EMAIL` berisi `to`, `subject`, dan nomor tiket; **isi email tidak disimpan** (menghindari PII di audit).
+
+### C. Pemecahan masalah
+```bash
+docker exec it-service-desk-prod sh -c 'echo ${SMTP_HOST}'
+docker logs it-service-desk-prod | grep -i "send ticket email"
+```
+- Tombol tidak muncul padahal `.env` sudah diisi → container belum di-recreate (`docker compose up -d`).
+- `Email belum dikonfigurasi pada server ini` (503) → `SMTP_HOST` kosong di container.
+- "Autentikasi SMTP ditolak" → cek `SMTP_USER`/`SMTP_PASSWORD`; banyak relay memakai *app password*, bukan password akun.
+- "Tidak dapat terhubung ke server email" → host/port salah atau firewall ke relay.
+- "Alamat penerima ditolak relay" → alamat salah, atau relay melarang domain tujuan.
+
+---
+
+## 4. Prosedur Backup & Restore Data Container
 
 ### A. Backup Database PostgreSQL dari Container
 ```bash
@@ -161,7 +201,7 @@ docker run --rm -v it-service-desk-uploads-data:/volume -v $(pwd):/backup alpine
 
 ---
 
-## 4. Keamanan Log & Hardening Produksi
+## 5. Keamanan Log & Hardening Produksi
 
 - Container berjalan di jaringan internal bridge tertutup.
 - Port database `5432` pada production compose tidak terekspos ke internet publik (hanya dapat diakses oleh container `app`).
