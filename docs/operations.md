@@ -63,7 +63,7 @@ docker compose -f docker-compose.prod.yml down
 
 ## 2. Notifikasi Telegram untuk Tiket Baru
 
-Aplikasi mengirim satu pesan ke chat/grup Telegram untuk setiap peristiwa tiket: **tiket baru**, **tiket ditutup/diselesaikan**, dan **balasan percakapan** (dari pelapor maupun tim IT). Fitur ini **opsional**: tanpa konfigurasi, aplikasi berjalan seperti biasa.
+Aplikasi mengirim pesan ke chat/grup Telegram untuk dua peristiwa: **tiket baru** dan **pesan baru dari pelapor** di percakapan tiket. Balasan dari tim IT dan penutupan tiket tidak dikirim, agar grup hanya berisi hal yang perlu ditindaklanjuti. Fitur ini **opsional**: tanpa konfigurasi, aplikasi berjalan seperti biasa.
 
 ### A. Menyiapkan Bot & Chat ID
 1. Chat `@BotFather` di Telegram → `/newbot` → simpan token (`<bot_id>:<secret>`).
@@ -104,29 +104,16 @@ TKT-000123 · Printer <lantai 2> tidak bisa print
 🔗 https://itsd.internal.example.com/tickets/TKT-000123
 ```
 
-Contoh balasan dan penutupan:
+Balasan staf IT hanya tampil di percakapan aplikasi, tidak di Telegram. Contoh pesan pelapor:
 
 ```
-💬 BALASAN BARU — DARI TIM IT
+💬 BALASAN BARU — DARI PELAPOR
 
 🔖 TKT-000123
 📌 Printer ruang meeting tidak bisa print
-👤 Siti IT (@siti) · IT Staff
+👤 Budi Santoso (@budi) · User
 🕒 24 Sep 2026, 16.55 WIB
-💬 Sudah kami tangani, silakan dicoba lagi.
-
-🔗 Buka tiket TKT-000123
-```
-
-```
-✅ TIKET SELESAI / DITUTUP
-
-🔖 TKT-000123
-📌 Printer ruang meeting tidak bisa print
-🏷️ Critical
-✅ Ditutup oleh Siti IT (@siti)
-🕒 24 Sep 2026, 17.10 WIB
-🛠️ Kabel LAN diganti dan driver di-restart.
+💬 Sudah dicoba restart, masih belum bisa.
 
 🔗 Buka tiket TKT-000123
 ```
@@ -141,7 +128,7 @@ Contoh balasan dan penutupan:
 # Cek konfigurasi terbaca (tidak menulis pesan)
 docker exec it-service-desk-prod sh -c 'echo ${TELEGRAM_CHAT_ID}'
 # Uji kirim manual ke chat/topic (tanpa menunggu tiket baru)
-bun run scripts/telegram-smoke.ts <botToken> <chatId> [threadId] [new|closed|reply]
+bun run scripts/telegram-smoke.ts <botToken> <chatId> [threadId] [new|reply]
 # Log kegagalan pengiriman
 docker logs it-service-desk-prod | grep -i telegram
 ```
@@ -149,7 +136,8 @@ docker logs it-service-desk-prod | grep -i telegram
 - `HTTP 400 ... chat not found` → bot belum ditambahkan ke grup/chat id salah.
 - `HTTP 400 ... message thread not found` → `TELEGRAM_THREAD_ID` salah, atau topic/grup berubah. Ambil ulang thread id dari menu "Copy Link" topic.
 - `HTTP 403 ... not enough rights` → jadikan bot admin grup agar dapat menulis ke topic.
-- Notifikasi ganda saat pengguna klik dua kali → tidak terjadi; tiket dan pesan memakai kunci `requestId`, dan hanya insert baru yang memicu notifikasi.
+- Notifikasi ganda saat pengguna klik dua kali → tidak terjadi; tiket dan pesan memakai kunci `requestId`, dan hanya insert baru dari pelapor yang memicu notifikasi.
+- Notifikasi balasan tidak muncul padahal pesan terkirim → hanya pesan dari **pembuat tiket** yang dinotifikasi; balasan staf IT memang tidak dikirim.
 - `HTTP 429` → rate limit; dikirim ulang otomatis, turunkan frekuensi grup bila sering terjadi.
 
 ---

@@ -15,16 +15,6 @@ export interface NewTicketNotification {
   createdAt: string;
 }
 
-export interface TicketClosedNotification {
-  ticketNumber: string;
-  title: string;
-  priority: string;
-  solution: string;
-  resolverFullName: string;
-  resolverUsername: string;
-  closedAt: string;
-}
-
 export interface TicketReplyNotification {
   ticketNumber: string;
   title: string;
@@ -37,7 +27,6 @@ export interface TicketReplyNotification {
 
 export interface TelegramNotifier {
   notifyNewTicket(ticket: NewTicketNotification): Promise<void>;
-  notifyTicketClosed(ticket: TicketClosedNotification): Promise<void>;
   notifyTicketReply(reply: TicketReplyNotification): Promise<void>;
   /** Waits for in-flight notifications to finish. Call on shutdown. */
   close(): Promise<void>;
@@ -137,18 +126,6 @@ export function formatNewTicketMessage(ticket: NewTicketNotification, appUrl = '
   );
 }
 
-export function formatTicketClosedMessage(ticket: TicketClosedNotification, appUrl = ''): string {
-  const fields: Array<[string, string]> = [
-    ['🔖', ticket.ticketNumber],
-    ['📌', ticket.title],
-    ['🏷️', ticket.priority],
-    ['✅', `Ditutup oleh ${ticket.resolverFullName} (@${ticket.resolverUsername})`],
-    ['🕒', ticket.closedAt],
-  ];
-  if (ticket.solution.trim()) fields.push(['🛠️', ticket.solution]);
-  return message('✅ <b>TIKET SELESAI / DITUTUP</b>', fields, ticket.ticketNumber, appUrl);
-}
-
 export function formatTicketReplyMessage(reply: TicketReplyNotification, appUrl = ''): string {
   const fromStaff = reply.senderRole === 'IT Staff' || reply.senderRole === 'Super Admin';
   const fields: Array<[string, string]> = [
@@ -210,7 +187,6 @@ export function createTelegramNotifier(
 
   return {
     notifyNewTicket: (ticket) => enqueue(formatNewTicketMessage(ticket, appUrl)),
-    notifyTicketClosed: (ticket) => enqueue(formatTicketClosedMessage(ticket, appUrl)),
     notifyTicketReply: (reply) => enqueue(formatTicketReplyMessage(reply, appUrl)),
     async close() {
       closed = true;

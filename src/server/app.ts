@@ -786,8 +786,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     const { solution } = validation.data;
 
     try {
-      let closedTicket: { ticketNumber: string; title: string; priority: string; solution: string; closedAt: string } | undefined;
-      const response = await ctx.sql.begin(async (tx) => {
+      return await ctx.sql.begin(async (tx) => {
       const ticketRows = await tx`
         SELECT id, creator_id AS "creatorId", assignee_id AS "assigneeId", status
         FROM tickets
@@ -842,32 +841,12 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
           )
         `;
 
-        const closedAt = String(resRows[0].closedAt);
-        closedTicket = {
-          ticketNumber: String(updatedTickets[0].ticketNumber),
-          title: String(updatedTickets[0].title),
-          priority: String(updatedTickets[0].priority),
-          solution,
-          closedAt,
-        };
-
       return json({
         message: 'Tiket berhasil diselesaikan dan ditutup.',
         ticket: updatedTickets[0],
         resolution: resRows[0],
       });
       });
-
-      // Fire-and-forget: a Telegram outage must never affect the close response.
-      const closed = closedTicket;
-      if (closed) {
-        void options.notifier?.notifyTicketClosed({
-          ...closed,
-          resolverFullName: user.fullName || user.username,
-          resolverUsername: user.username,
-        }).catch((err) => console.error('Ticket notifier error:', err instanceof Error ? err.name : 'UnknownError'));
-      }
-      return response;
     } catch (err: any) {
       if (err?.message === 'ALREADY_CLOSED') {
         return json({ error: { code: 'CONFLICT', message: 'Tiket sudah ditutup oleh proses lain.' } }, 409);
@@ -983,8 +962,9 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         newMsg.senderUsername = user.username;
         newMsg.senderRole = user.role;
 
-        // Only a genuinely new message notifies; a replayed requestId stays silent.
-        if (isNew) {
+        // Only the reporter's own messages notify: staff replies stay out of Telegram,
+        // and a replayed requestId (isNew false) never notifies twice.
+        if (isNew && String(user.id) === String(ticket.creatorId)) {
           void options.notifier?.notifyTicketReply({
             ticketNumber: String(ticket.ticketNumber),
             title: String(ticket.title),

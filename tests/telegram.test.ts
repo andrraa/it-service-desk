@@ -4,7 +4,6 @@ import {
   createTelegramNotifier,
   escapeHtml,
   formatNewTicketMessage,
-  formatTicketClosedMessage,
   formatTicketReplyMessage,
   readTelegramConfig,
   truncate,
@@ -44,7 +43,6 @@ test('POST /api/tickets notifies the channel once, with creator identity and lin
   });
   const notifier = {
     notifyNewTicket: async (t: Parameters<typeof formatNewTicketMessage>[0]) => { sent.push(formatNewTicketMessage(t, 'https://desk.example')); },
-    notifyTicketClosed: async () => {},
     notifyTicketReply: async () => {},
     close: async () => {},
   };
@@ -82,7 +80,6 @@ test('POST /api/tickets still returns 201 without a notifier or when Telegram fa
   expect((await handleRequest(request(), { sql })).status).toBe(201);
   const failing = {
     notifyNewTicket: async () => { throw new Error('telegram down'); },
-    notifyTicketClosed: async () => {},
     notifyTicketReply: async () => {},
     close: async () => {},
   };
@@ -188,23 +185,6 @@ test('notifier: retries transient failures then gives up without throwing', asyn
   await expect(send).resolves.toBeUndefined();
   expect(attempts).toBe(3);
 }, 10_000);
-test('format: ticket-closed message carries the resolvers, solution and link', () => {
-  const message = formatTicketClosedMessage({
-    ticketNumber: 'TKT-000123',
-    title: 'Printer <lantai 2> tidak bisa print',
-    priority: 'Critical',
-    solution: 'Ganti kabel LAN & restart driver.',
-    resolverFullName: 'Siti IT',
-    resolverUsername: 'siti',
-    closedAt: '2026-09-24T11:05:00.000Z',
-  }, 'https://desk.example.com');
-
-  expect(message).toContain('✅ <b>TIKET SELESAI / DITUTUP</b>');
-  expect(message).toContain('✅ Ditutup oleh Siti IT (@siti)');
-  expect(message).toContain('🛠️ Ganti kabel LAN &amp; restart driver.');
-  expect(message).toContain('<a href="https://desk.example.com/tickets/TKT-000123">');
-});
-
 test('format: reply message labels the sender side and escapes the text', () => {
   const fromStaff = formatTicketReplyMessage({
     ticketNumber: 'TKT-000123', title: 'Printer rusak', messageText: 'Sudah saya cek <hari ini>.',
