@@ -55,7 +55,7 @@
 >
   <h2 id="email-modal-title">Kirim Tiket via Email</h2>
   <p class="field-hint" style="margin-top: 4px;">
-    Tiket <strong class="tabular-nums">{ticketNumber}</strong> sudah ditutup. Isi tujuan dan pesan, lalu kirim.
+    Isi tujuan dan pesan untuk tiket <strong class="tabular-nums">{ticketNumber}</strong>, lalu kirim.
   </p>
 
   {#if errorMessage}

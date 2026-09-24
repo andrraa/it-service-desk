@@ -39,14 +39,13 @@ describe('Send ticket email (Live PostgreSQL)', () => {
       body: JSON.stringify(body),
     }), { sql }, { mailer });
 
-  test('rejects non-staff, unclosed tickets, unknown tickets, missing session and unconfigured SMTP', async () => {
-    await withTicket(async ({ sql, openId, closedId, sent, mailer }) => {
-      expect((await post(sql, closedId, 'email_sess_user', validBody, mailer)).status).toBe(403);
-      expect((await post(sql, openId, 'email_sess_staff', validBody, mailer)).status).toBe(403);
+  test('rejects non-staff, unknown tickets, missing session and unconfigured SMTP', async () => {
+    await withTicket(async ({ sql, openId, sent, mailer }) => {
+      expect((await post(sql, openId, 'email_sess_user', validBody, mailer)).status).toBe(403);
       expect((await post(sql, 999999, 'email_sess_staff', validBody, mailer)).status).toBe(404);
-      expect((await post(sql, closedId, null, validBody, mailer)).status).toBe(401);
+      expect((await post(sql, openId, null, validBody, mailer)).status).toBe(401);
 
-      const disabled = await post(sql, closedId, 'email_sess_staff', validBody, undefined);
+      const disabled = await post(sql, openId, 'email_sess_staff', validBody, undefined);
       expect(disabled.status).toBe(503);
       expect((await disabled.json() as any).error.code).toBe('EMAIL_DISABLED');
       expect(sent).toHaveLength(0);
@@ -54,8 +53,8 @@ describe('Send ticket email (Live PostgreSQL)', () => {
   });
 
   test('validates the payload before touching SMTP', async () => {
-    await withTicket(async ({ sql, closedId, sent, mailer }) => {
-      const invalid = await post(sql, closedId, 'email_sess_staff', { to: 'bukan-email', subject: 'Halo\r\nBcc: x@y.z', body: '' }, mailer);
+    await withTicket(async ({ sql, openId, sent, mailer }) => {
+      const invalid = await post(sql, openId, 'email_sess_staff', { to: 'bukan-email', subject: 'Halo\r\nBcc: x@y.z', body: '' }, mailer);
       expect(invalid.status).toBe(422);
       const body: any = await invalid.json();
       expect(Object.keys(body.error.details).sort()).toEqual(['body', 'subject', 'to']);
@@ -63,9 +62,10 @@ describe('Send ticket email (Live PostgreSQL)', () => {
     });
   });
 
-  test('sends for a closed ticket and records an audit entry without the body', async () => {
-    await withTicket(async ({ sql, closedId, sent, mailer }) => {
-      const res = await post(sql, closedId, 'email_sess_staff', validBody, mailer);
+  // Email is allowed at any status, so staff can update the reporter before the ticket is done.
+  test('sends for an open ticket and records an audit entry without the body', async () => {
+    await withTicket(async ({ sql, openId, sent, mailer }) => {
+      const res = await post(sql, openId, 'email_sess_staff', validBody, mailer);
       expect(res.status).toBe(200);
       const body: any = await res.json();
       expect(body.data).toMatchObject({ to: validBody.to, subject: validBody.subject });
@@ -73,7 +73,7 @@ describe('Send ticket email (Live PostgreSQL)', () => {
       expect(sent).toHaveLength(1);
       expect(sent[0]).toMatchObject({ to: validBody.to, subject: validBody.subject, body: validBody.body });
 
-      const logs = await sql`SELECT action, new_value FROM audit_logs WHERE ticket_id = ${closedId} AND action = 'SEND_EMAIL'`;
+      const logs = await sql`SELECT action, new_value FROM audit_logs WHERE ticket_id = ${openId} AND action = 'SEND_EMAIL'`;
       expect(logs).toHaveLength(1);
       expect(logs[0]!.new_value).toMatchObject({ to: validBody.to, subject: validBody.subject });
       expect(JSON.stringify(logs[0]!.new_value)).not.toContain(validBody.body);
@@ -81,17 +81,17 @@ describe('Send ticket email (Live PostgreSQL)', () => {
   });
 
   test('reports a relay failure and records nothing', async () => {
-    await withTicket(async ({ sql, closedId }) => {
+    await withTicket(async ({ sql, openId }) => {
       const failing: Mailer = {
         send: async () => { throw Object.assign(new Error('relay down'), { code: 'ECONNECTION' }); },
         close: async () => {},
       };
-      const res = await post(sql, closedId, 'email_sess_staff', validBody, failing);
+      const res = await post(sql, openId, 'email_sess_staff', validBody, failing);
       expect(res.status).toBe(502);
       const body: any = await res.json();
       expect(body.error.code).toBe('EMAIL_SEND_FAILED');
       expect(body.error.message).toContain('Tidak dapat terhubung');
-      const logs = await sql`SELECT id FROM audit_logs WHERE ticket_id = ${closedId} AND action = 'SEND_EMAIL'`;
+      const logs = await sql`SELECT id FROM audit_logs WHERE ticket_id = ${openId} AND action = 'SEND_EMAIL'`;
       expect(logs).toHaveLength(0);
     });
   });

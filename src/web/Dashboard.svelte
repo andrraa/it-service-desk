@@ -428,7 +428,7 @@
                       Ambil Tiket
                     </button>
                   {/if}
-                  {#if ticket.status === 'Closed' && emailEnabled}
+                  {#if emailEnabled}
                     <button
                       type="button"
                       class="btn btn-secondary btn-sm"

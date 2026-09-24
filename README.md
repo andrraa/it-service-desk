@@ -17,7 +17,7 @@ Dokumentasi terkait:
 - Manajemen pengguna, staf IT, status akun, serta reset password oleh Super Admin.
 - Antarmuka responsif dengan Light Mode dan Dark Mode.
 - Notifikasi Telegram untuk tiket baru (opsional, lihat [panduan operasional](docs/operations.md#2-notifikasi-telegram-untuk-tiket-baru)).
-- Kirim tiket yang sudah ditutup ke email penerima (opsional, lihat [panduan operasional](docs/operations.md#3-kirim-tiket-via-email-opsional)).
+- Kirim tiket ke email penerima pada status apa pun (opsional, lihat [panduan operasional](docs/operations.md#3-kirim-tiket-via-email-opsional)).
 
 ## Teknologi
 
@@ -61,7 +61,7 @@ Notifikasi Telegram dan kirim email bersifat opsional (lihat `.env.example`). Ta
 
 ## Kirim Tiket via Email
 
-Staf IT dan Super Admin dapat mengirim ringkasan tiket yang **sudah ditutup** ke email penerima. Penerima, subjek, dan isi pesan diisi manual lewat modal (subjek dan isi sudah terisi otomatis dari tiket dan solusinya, lalu bisa diubah). Pesan dikirim sebagai teks biasa tanpa lampiran, dan tidak muncul di percakapan tiket — hanya tercatat di audit log sebagai `SEND_EMAIL`.
+Staf IT dan Super Admin dapat mengirim ringkasan tiket ke email penerima, **pada status apa pun**. Penerima, subjek, dan isi pesan diisi manual lewat modal (subjek dan isi sudah terisi otomatis dari tiket dan solusinya, lalu bisa diubah). Pesan dikirim sebagai teks biasa tanpa lampiran, dan tidak muncul di percakapan tiket — hanya tercatat di audit log sebagai `SEND_EMAIL`.
 
 1. Siapkan relay SMTP perusahaan (host, port, kredensial, alamat pengirim).
 2. Setel environment berikut, lalu restart container:

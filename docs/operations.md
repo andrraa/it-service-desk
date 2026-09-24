@@ -144,7 +144,7 @@ docker logs it-service-desk-prod | grep -i telegram
 
 ## 3. Kirim Tiket via Email (opsional)
 
-Staf IT / Super Admin dapat mengirim tiket yang **sudah ditutup** ke email penerima melalui tombol **Kirim Email** (tersedia di detail tiket dan kolom aksi antrean IT). Penerima, subjek, dan isi pesan diisi manual; subjek dan isi terisi otomatis dari tiket + solusinya dan bisa diedit sebelum dikirim. Pesan berupa teks biasa tanpa lampiran.
+Staf IT / Super Admin dapat mengirim tiket ke email penerima melalui tombol **Kirim Email** (tersedia di detail tiket untuk semua status, dan di kolom aksi antrean IT). Penerima, subjek, dan isi pesan diisi manual; subjek dan isi terisi otomatis dari tiket + solusinya dan bisa diedit sebelum dikirim. Pesan berupa teks biasa tanpa lampiran.
 
 ### A. Konfigurasi
 ```bash
@@ -166,7 +166,7 @@ docker compose -f docker-compose.prod.yml up -d   # tanpa --build; hanya environ
 - Pengiriman **synchronous**: respons API menunggu relay (timeout 10 s koneksi / 15 s socket), agar staf langsung tahu berhasil atau gagal.
 - Tanpa retry dan tanpa antrean; kegagalan dikembalikan sebagai `502 EMAIL_SEND_FAILED` dengan pesan yang bisa ditindaklanjuti (autentikasi ditolak, relay tak terjangkau, penerima ditolak).
 - Rate limit 10 email/menit per pengguna → `429` + `Retry-After`.
-- Guard: hanya peran `IT Staff`/`Super Admin` (403), hanya tiket `Closed` (403 `TICKET_NOT_CLOSED`), `to`/`subject` menolak karakter baris baru (anti header injection), subjek ≤ 200 dan isi ≤ 5000 karakter.
+- Guard: hanya peran `IT Staff`/`Super Admin` (403); status tiket tidak dibatasi. `to`/`subject` menolak karakter baris baru (anti header injection), subjek ≤ 200 dan isi ≤ 5000 karakter.
 - Audit log mencatat `SEND_EMAIL` berisi `to`, `subject`, dan nomor tiket; **isi email tidak disimpan** (menghindari PII di audit).
 
 ### C. Pemecahan masalah

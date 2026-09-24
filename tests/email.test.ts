@@ -121,4 +121,13 @@ describe('buildEmailDraft', () => {
     expect(draft.body).not.toContain('Penanganan yang dilakukan:');
     expect(draft.body).toContain('Tim IT');
   });
+
+  test('wording follows the ticket status, since email is not limited to closed tickets', () => {
+    expect(buildEmailDraft(ticket).body).toContain('sudah kami tutup');
+    for (const status of ['Open', 'In Progress'] as const) {
+      const draft = buildEmailDraft({ ...ticket, status, resolution: null });
+      expect(draft.body).toContain(`masih berstatus "${status}"`);
+      expect(draft.body).not.toContain('sudah kami tutup');
+    }
+  });
 });

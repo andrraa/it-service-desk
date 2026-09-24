@@ -1028,19 +1028,14 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
 
     try {
       const ticketRows = await ctx.sql`
-        SELECT id, ticket_number AS "ticketNumber", title, status FROM tickets
+        SELECT id, ticket_number AS "ticketNumber", title FROM tickets
         WHERE id::text = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
         LIMIT 1
       `;
       if (ticketRows.length === 0) {
         return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
       }
-      const ticket = ticketRows[0] as { id: number | string; ticketNumber: string; title: string; status: string };
-
-      // PRD: email is an artefact of a finished ticket, so unfinished tickets stay out.
-      if (ticket.status !== 'Closed') {
-        return json({ error: { code: 'TICKET_NOT_CLOSED', message: 'Email hanya dapat dikirim untuk tiket yang sudah ditutup.' } }, 403);
-      }
+      const ticket = ticketRows[0] as { id: number | string; ticketNumber: string; title: string };
 
       const rateCheck = emailRateLimiter.isAllowed(`email:${user.id}`);
       if (!rateCheck.allowed) {

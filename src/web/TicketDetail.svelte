@@ -29,7 +29,7 @@
   let closeError = $state('');
   let isClosing = $state(false);
 
-  // Email modal (Closed tickets only, IT staff / admin)
+  // Email modal (any status, IT staff / admin)
   let showEmailModal = $state(false);
   let emailDraft = $state({ subject: '', body: '' });
 
@@ -172,7 +172,7 @@
     </button>
 
     <div class="header-actions">
-      {#if ticket && ticket.status === 'Closed' && emailEnabled && (currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin')}
+      {#if ticket && emailEnabled && (currentUser.role === 'IT Staff' || currentUser.role === 'Super Admin')}
         <button type="button" class="btn btn-secondary" onclick={openEmailModal}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <rect x="2" y="4" width="20" height="16" rx="2" />
