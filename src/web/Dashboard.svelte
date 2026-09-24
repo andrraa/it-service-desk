@@ -26,7 +26,7 @@
   let claimError = $state('');
 
   // Filters
-  let statusFilter = $state<'all' | 'Open' | 'In Progress'>('all');
+  let statusFilter = $state<'all' | 'active' | 'Open' | 'In Progress' | 'closed'>('active');
   let priorityFilter = $state<string>('all');
   let unassignedOnly = $state(false);
   let assignedToMe = $state(false);
@@ -55,6 +55,11 @@
     return `${days} hari ${hours % 24} jam`;
   }
 
+  /** 'closed'/'all' mean the same thing to the API: include Closed tickets. */
+  function apiStatus(status: typeof statusFilter): string {
+    return status === 'active' ? 'all' : status;
+  }
+
   async function fetchDashboardData(nextPage = 1) {
     const requestGeneration = ++generation;
     isLoading = true;
@@ -69,8 +74,12 @@
       summary = sumData.summary;
 
       // 2. Fetch queue
+      // 'closed' and 'all' need the archive scope; the default queue stays active-only.
+      const isArchive = statusFilter === 'closed' || statusFilter === 'all';
       const queueUrl = new URL('/api/dashboard/queue', window.location.origin);
-      if (statusFilter !== 'all') queueUrl.searchParams.set('status', statusFilter);
+      const apiStatusFilter = apiStatus(statusFilter);
+      if (apiStatusFilter !== 'all') queueUrl.searchParams.set('status', apiStatusFilter);
+      if (isArchive) queueUrl.searchParams.set('scope', 'all');
       if (priorityFilter !== 'all') queueUrl.searchParams.set('priority', priorityFilter);
       if (unassignedOnly) queueUrl.searchParams.set('unassigned', 'true');
       if (assignedToMe) queueUrl.searchParams.set('assignedToMe', 'true');
@@ -171,7 +180,7 @@
   }
 
   function resetFilters() {
-    statusFilter = 'all';
+    statusFilter = 'active';
     priorityFilter = 'all';
     unassignedOnly = false;
     assignedToMe = false;
@@ -256,9 +265,11 @@
       <div class="filter-item">
         <label for="queue-status" class="sr-only">Filter Status</label>
         <select id="queue-status" bind:value={statusFilter} onchange={() => fetchDashboardData(1)}>
-          <option value="all">Semua Aktif</option>
+          <option value="active">Semua Aktif</option>
           <option value="Open">Hanya Open</option>
           <option value="In Progress">Hanya In Progress</option>
+          <option value="closed">Hanya Closed</option>
+          <option value="all">Semua Status (termasuk Closed)</option>
         </select>
       </div>
 
@@ -309,7 +320,7 @@
   {:else if queue.length === 0}
     <div class="empty-state">
       <p class="empty-state-title">Antrean Kosong</p>
-      <p class="empty-state-desc">Tidak ada tiket aktif yang memerlukan penanganan sesuai filter yang dipilih.</p>
+      <p class="empty-state-desc">Tidak ada tiket yang sesuai dengan filter yang dipilih.</p>
       <button type="button" class="btn btn-secondary" onclick={resetFilters}>
         Reset Filter
       </button>

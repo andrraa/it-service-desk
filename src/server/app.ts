@@ -553,7 +553,13 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     }
 
     try {
-      const statusFilter = url.searchParams.get('status')?.trim();
+      let statusFilter = url.searchParams.get('status')?.trim();
+      if (statusFilter === 'closed') {
+        statusFilter = 'Closed';
+      } else if (statusFilter && statusFilter !== 'Open' && statusFilter !== 'In Progress') {
+        throw new RequestError(422, 'VALIDATION_ERROR', 'Status filter tidak valid.');
+      }
+      const includeClosed = statusFilter === 'Closed' || url.searchParams.get('scope') === 'all';
       const priorityFilter = url.searchParams.get('priority')?.trim();
       const unassignedOnly = url.searchParams.get('unassigned') === 'true';
       const assignedToMe = url.searchParams.get('assignedToMe') === 'true';
@@ -583,7 +589,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         FROM tickets t
         JOIN users u ON t.creator_id = u.id
         LEFT JOIN users a ON t.assignee_id = a.id
-        WHERE t.status IN ('Open', 'In Progress')
+        WHERE (${includeClosed ? ctx.sql`TRUE` : ctx.sql`t.status IN ('Open', 'In Progress')`})
           AND (${statusFilter ? ctx.sql`t.status = ${statusFilter}` : ctx.sql`TRUE`})
           AND (${priorityFilter ? ctx.sql`t.priority = ${priorityFilter}` : ctx.sql`TRUE`})
           AND (${unassignedOnly ? ctx.sql`t.assignee_id IS NULL` : ctx.sql`TRUE`})
