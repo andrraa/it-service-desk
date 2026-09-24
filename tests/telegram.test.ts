@@ -49,7 +49,7 @@ test('POST /api/tickets notifies the channel once, with creator identity and lin
   expect(sent).toHaveLength(1);
   expect(sent[0]).toContain('🔴 <b>TIKET BARU — CRITICAL</b>');
   expect(sent[0]).toContain('Budi Santoso (@budi)');
-  expect(sent[0]).toContain('https://desk.example/tickets/TKT-000123');
+  expect(sent[0]).toContain('<a href="https://desk.example/tickets/TKT-000123">');
 
   // Same requestId replayed => the row is reused (isNew = false), so no second notification.
   const replaySql = createMockSql((query) => {
@@ -118,10 +118,13 @@ test('config: telegram is optional and validated when present', () => {
 test('format: escapes HTML, truncates long text, keeps ticket fields readable', () => {
   const message = formatNewTicketMessage(ticket, 'https://desk.example.com/');
   expect(message).toContain('🔴 <b>TIKET BARU — CRITICAL</b>');
-  expect(message).toContain('<b>TKT-000123</b> · Printer &lt;lantai 2&gt; tidak bisa print');
+  expect(message).toContain('\n\n'); // header block is separated from the detail block
+  expect(message).toContain('📌 <b>Printer &lt;lantai 2&gt; tidak bisa print</b>');
   expect(message).toContain('👤 Budi &amp; Santoso (@budi)');
-  expect(message).toContain('🔗 https://desk.example.com/tickets/TKT-000123');
+  // Telegram only renders links from anchors; a bare URL is shown as plain text.
+  expect(message).toContain('🔗 <a href="https://desk.example.com/tickets/TKT-000123">Buka tiket TKT-000123</a>');
   expect(message).not.toContain('<lantai');
+  expect(message.split('\n')).toHaveLength(9); // header + blank + seven detail lines
 
   expect(escapeHtml('a & b <c>')).toBe('a &amp; b &lt;c&gt;');
   expect(truncate('a'.repeat(200), 10)).toBe(`${'a'.repeat(9)}…`);

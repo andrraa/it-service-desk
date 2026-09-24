@@ -72,21 +72,28 @@ export function truncate(value: string, max: number): string {
 
 export function formatNewTicketMessage(ticket: NewTicketNotification, appUrl = ''): string {
   const icon = PRIORITY_ICONS[ticket.priority] ?? '⚪';
-  const time = new Intl.DateTimeFormat('id-ID', {
+  const link = appUrl ? `${appUrl.replace(/\/+$/, '')}/tickets/${encodeURIComponent(ticket.ticketNumber)}` : '';
+  const time = `${new Intl.DateTimeFormat('id-ID', {
     timeZone: 'Asia/Jakarta',
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(ticket.createdAt));
-  const link = appUrl ? `${appUrl.replace(/\/+$/, '')}/tickets/${encodeURIComponent(ticket.ticketNumber)}` : '';
+  }).format(new Date(ticket.createdAt))} WIB`;
 
-  return [
-    `${icon} <b>TIKET BARU — ${escapeHtml(ticket.priority.toUpperCase())}</b>`,
-    `<b>${escapeHtml(ticket.ticketNumber)}</b> · ${escapeHtml(truncate(ticket.title, TITLE_LIMIT))}`,
-    `👤 ${escapeHtml(ticket.creatorFullName)} (@${escapeHtml(ticket.creatorUsername)})`,
-    `🕒 ${escapeHtml(time)} WIB`,
-    `📝 <i>${escapeHtml(truncate(ticket.description, DESCRIPTION_LIMIT))}</i>`,
-    ...(link ? [`🔗 ${escapeHtml(link)}`] : []),
-  ].join('\n');
+  // Telegram renders HTML links, not bare URLs: localhost stays plain text while the
+  // anchor stays clickable. Emoji keep the original line, HTML keeps the escaped text.
+  const esc = (value: string) => escapeHtml(value);
+  const line = (value: string, max: number) => escapeHtml(truncate(value, max));
+  const fields: Array<[string, string]> = [
+    ['🔖', `<b>${esc(ticket.ticketNumber)}</b>`],
+    ['📌', `<b>${line(ticket.title, TITLE_LIMIT)}</b>`],
+    ['👤', `${line(ticket.creatorFullName, 64)} (@${line(ticket.creatorUsername, 32)})`],
+    ['🏷️', esc(ticket.priority)],
+    ['🕒', esc(time)],
+  ];
+  if (ticket.description.trim()) fields.push(['📝', `<i>${line(ticket.description, DESCRIPTION_LIMIT)}</i>`]);
+  if (link) fields.push(['🔗', `<a href="${esc(link)}">Buka tiket ${esc(ticket.ticketNumber)}</a>`]);
+
+  return `${icon} <b>TIKET BARU — ${esc(ticket.priority.toUpperCase())}</b>\n\n${fields.map(([key, value]) => `${key} ${value}`).join('\n')}`;
 }
 
 /**
