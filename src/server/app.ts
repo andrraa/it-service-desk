@@ -780,7 +780,8 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     const { solution } = validation.data;
 
     try {
-      return await ctx.sql.begin(async (tx) => {
+      let closedTicket: { ticketNumber: string; title: string; priority: string; solution: string; closedAt: string } | undefined;
+      const response = await ctx.sql.begin(async (tx) => {
       const ticketRows = await tx`
         SELECT id, creator_id AS "creatorId", assignee_id AS "assigneeId", status
         FROM tickets
@@ -835,12 +836,32 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
           )
         `;
 
+        const closedAt = String(resRows[0].closedAt);
+        closedTicket = {
+          ticketNumber: String(updatedTickets[0].ticketNumber),
+          title: String(updatedTickets[0].title),
+          priority: String(updatedTickets[0].priority),
+          solution,
+          closedAt,
+        };
+
       return json({
         message: 'Tiket berhasil diselesaikan dan ditutup.',
         ticket: updatedTickets[0],
         resolution: resRows[0],
       });
       });
+
+      // Fire-and-forget: a Telegram outage must never affect the close response.
+      const closed = closedTicket;
+      if (closed) {
+        void options.notifier?.notifyTicketClosed({
+          ...closed,
+          resolverFullName: user.fullName || user.username,
+          resolverUsername: user.username,
+        }).catch((err) => console.error('Ticket notifier error:', err instanceof Error ? err.name : 'UnknownError'));
+      }
+      return response;
     } catch (err: any) {
       if (err?.message === 'ALREADY_CLOSED') {
         return json({ error: { code: 'CONFLICT', message: 'Tiket sudah ditutup oleh proses lain.' } }, 409);
@@ -860,7 +881,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     }
 
     const ticketRows = await ctx.sql`
-      SELECT id, creator_id AS "creatorId", status FROM tickets
+      SELECT id, ticket_number AS "ticketNumber", creator_id AS "creatorId", title, status FROM tickets
       WHERE id::text = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
       LIMIT 1
     `;
@@ -869,7 +890,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
       return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
     }
 
-    const ticket = ticketRows[0] as { id: number | string; creatorId: number | string; status: string };
+    const ticket = ticketRows[0] as { id: number | string; ticketNumber: string; creatorId: number | string; title: string; status: string };
 
     if (user.role === 'User' && String(ticket.creatorId) !== String(user.id)) {
       return json({ error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki hak akses ke percakapan tiket ini.' } }, 403);
@@ -946,15 +967,28 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
             INSERT INTO messages (ticket_id, sender_id, message_text, request_id)
             VALUES (${ticket.id}, ${user.id}, ${messageText}, ${requestId})
             ON CONFLICT (sender_id, request_id) DO UPDATE SET request_id = EXCLUDED.request_id
-            RETURNING id, ticket_id AS "ticketId", sender_id AS "senderId", message_text AS "messageText", created_at AS "createdAt"
+            RETURNING id, ticket_id AS "ticketId", sender_id AS "senderId", message_text AS "messageText", created_at AS "createdAt", (xmax = 0) AS "isNew"
           `;
           const recipients = await createMessageNotification(tx, String(ticket.id), String(inserted[0].id), user);
           return { inserted, recipients };
         });
         for (const recipient of result.recipients) publishNotification(String(recipient.recipientId));
-        const newMsg = result.inserted[0] as TicketMessage;
+        const { isNew, ...newMsg } = result.inserted[0] as TicketMessage & { isNew: boolean };
         newMsg.senderUsername = user.username;
         newMsg.senderRole = user.role;
+
+        // Only a genuinely new message notifies; a replayed requestId stays silent.
+        if (isNew) {
+          void options.notifier?.notifyTicketReply({
+            ticketNumber: String(ticket.ticketNumber),
+            title: String(ticket.title),
+            messageText,
+            senderFullName: user.fullName || user.username,
+            senderUsername: user.username,
+            senderRole: user.role,
+            createdAt: String(newMsg.createdAt),
+          }).catch((err) => console.error('Ticket notifier error:', err instanceof Error ? err.name : 'UnknownError'));
+        }
 
         return json({ message: 'Pesan berhasil dikirim.', data: newMsg }, 201);
       } catch (err) {

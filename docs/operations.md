@@ -63,7 +63,7 @@ docker compose -f docker-compose.prod.yml down
 
 ## 2. Notifikasi Telegram untuk Tiket Baru
 
-Setiap tiket baru mengirim satu pesan ke chat/grup Telegram. Fitur ini **opsional**: tanpa konfigurasi, aplikasi berjalan seperti biasa.
+Aplikasi mengirim satu pesan ke chat/grup Telegram untuk setiap peristiwa tiket: **tiket baru**, **tiket ditutup/diselesaikan**, dan **balasan percakapan** (dari pelapor maupun tim IT). Fitur ini **opsional**: tanpa konfigurasi, aplikasi berjalan seperti biasa.
 
 ### A. Menyiapkan Bot & Chat ID
 1. Chat `@BotFather` di Telegram → `/newbot` → simpan token (`<bot_id>:<secret>`).
@@ -104,9 +104,36 @@ TKT-000123 · Printer <lantai 2> tidak bisa print
 🔗 https://itsd.internal.example.com/tickets/TKT-000123
 ```
 
+Contoh balasan dan penutupan:
+
+```
+💬 BALASAN BARU — DARI TIM IT
+
+🔖 TKT-000123
+📌 Printer ruang meeting tidak bisa print
+👤 Siti IT (@siti) · IT Staff
+🕒 24 Sep 2026, 16.55 WIB
+💬 Sudah kami tangani, silakan dicoba lagi.
+
+🔗 Buka tiket TKT-000123
+```
+
+```
+✅ TIKET SELESAI / DITUTUP
+
+🔖 TKT-000123
+📌 Printer ruang meeting tidak bisa print
+🏷️ Critical
+✅ Ditutup oleh Siti IT (@siti)
+🕒 24 Sep 2026, 17.10 WIB
+🛠️ Kabel LAN diganti dan driver di-restart.
+
+🔗 Buka tiket TKT-000123
+```
+
 - Ikon prioritas: 🔴 Critical, 🟠 High, 🟡 Medium, 🟢 Low.
 - Judul dipotong 120 karakter, deskripsi 300 karakter; semua teks di-escape HTML agar judul bertanda `<` `&` tidak membatalkan pengiriman.
-- Pengiriman bersifat *fire-and-forget*: permintaan pembuatan tiket tidak menunggu Telegram. Gagal jaringan/HTTP 5xx/429 dicoba maksimal 3 kali (250 ms → 1 s) lalu dicatat di log; HTTP 4xx tidak diulang.
+- Pengiriman bersifat *fire-and-forget*: respons API (buat tiket, kirim pesan, tutup tiket) tidak menunggu Telegram. Gagal jaringan/HTTP 5xx/429 dicoba maksimal 3 kali (250 ms → 1 s) lalu dicatat di log; HTTP 4xx tidak diulang.
 - Pengiriman per chat diserialkan agar urutan pesan tetap terjaga, dan saat server shutdown antrean yang masih berjalan diselesaikan sebelum proses keluar.
 
 ### D. Verifikasi & Pemecahan Masalah
@@ -114,7 +141,7 @@ TKT-000123 · Printer <lantai 2> tidak bisa print
 # Cek konfigurasi terbaca (tidak menulis pesan)
 docker exec it-service-desk-prod sh -c 'echo ${TELEGRAM_CHAT_ID}'
 # Uji kirim manual ke chat/topic (tanpa menunggu tiket baru)
-bun run scripts/telegram-smoke.ts <botToken> <chatId> [threadId]
+bun run scripts/telegram-smoke.ts <botToken> <chatId> [threadId] [new|closed|reply]
 # Log kegagalan pengiriman
 docker logs it-service-desk-prod | grep -i telegram
 ```
@@ -122,6 +149,7 @@ docker logs it-service-desk-prod | grep -i telegram
 - `HTTP 400 ... chat not found` → bot belum ditambahkan ke grup/chat id salah.
 - `HTTP 400 ... message thread not found` → `TELEGRAM_THREAD_ID` salah, atau topic/grup berubah. Ambil ulang thread id dari menu "Copy Link" topic.
 - `HTTP 403 ... not enough rights` → jadikan bot admin grup agar dapat menulis ke topic.
+- Notifikasi ganda saat pengguna klik dua kali → tidak terjadi; tiket dan pesan memakai kunci `requestId`, dan hanya insert baru yang memicu notifikasi.
 - `HTTP 429` → rate limit; dikirim ulang otomatis, turunkan frekuensi grup bila sering terjadi.
 
 ---

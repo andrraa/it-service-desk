@@ -15,8 +15,30 @@ export interface NewTicketNotification {
   createdAt: string;
 }
 
+export interface TicketClosedNotification {
+  ticketNumber: string;
+  title: string;
+  priority: string;
+  solution: string;
+  resolverFullName: string;
+  resolverUsername: string;
+  closedAt: string;
+}
+
+export interface TicketReplyNotification {
+  ticketNumber: string;
+  title: string;
+  messageText: string;
+  senderFullName: string;
+  senderUsername: string;
+  senderRole: string;
+  createdAt: string;
+}
+
 export interface TelegramNotifier {
   notifyNewTicket(ticket: NewTicketNotification): Promise<void>;
+  notifyTicketClosed(ticket: TicketClosedNotification): Promise<void>;
+  notifyTicketReply(reply: TicketReplyNotification): Promise<void>;
   /** Waits for in-flight notifications to finish. Call on shutdown. */
   close(): Promise<void>;
 }
@@ -30,8 +52,7 @@ const PRIORITY_ICONS: Record<string, string> = {
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const MAX_ATTEMPTS = 3;
-const TITLE_LIMIT = 120;
-const DESCRIPTION_LIMIT = 300;
+const FIELD_LIMIT = 300;
 
 export function readTelegramConfig(env: Record<string, string | undefined>): TelegramConfig | null {
   const token = env.TELEGRAM_BOT_TOKEN?.trim() ?? '';
@@ -70,30 +91,79 @@ export function truncate(value: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }
 
-export function formatNewTicketMessage(ticket: NewTicketNotification, appUrl = ''): string {
-  const icon = PRIORITY_ICONS[ticket.priority] ?? '⚪';
-  const link = appUrl ? `${appUrl.replace(/\/+$/, '')}/tickets/${encodeURIComponent(ticket.ticketNumber)}` : '';
-  const time = `${new Intl.DateTimeFormat('id-ID', {
+function icon(priority: string): string {
+  return PRIORITY_ICONS[priority] ?? '⚪';
+}
+
+function localTime(iso: string): string {
+  const formatted = new Intl.DateTimeFormat('id-ID', {
     timeZone: 'Asia/Jakarta',
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(ticket.createdAt))} WIB`;
+  }).format(new Date(iso));
+  return `${formatted} WIB`;
+}
 
-  // Telegram renders HTML links, not bare URLs: localhost stays plain text while the
-  // anchor stays clickable. Emoji keep the original line, HTML keeps the escaped text.
-  const esc = (value: string) => escapeHtml(value);
-  const line = (value: string, max: number) => escapeHtml(truncate(value, max));
+/**
+ * One notification body: bold headline, a blank line, then one emoji field per line.
+ * Telegram renders bare URLs as plain text, so the ticket link is always an anchor; emoji,
+ * bold and escaping are applied here so user text can never break the markup.
+ */
+function message(headline: string, fields: Array<[string, string]>, ticketNumber: string, appUrl: string): string {
+  const rows = fields.map(([key, value]) => {
+    const max = key === '🕒' || key === '🏷️' ? 64 : FIELD_LIMIT;
+    const text = escapeHtml(truncate(key === '🕒' ? localTime(value) : value, max));
+    return key === '📌' ? `${key} <b>${text}</b>` : `${key} ${text}`;
+  });
+  const link = appUrl ? `${appUrl.replace(/\/+$/, '')}/tickets/${encodeURIComponent(ticketNumber)}` : '';
+  if (link) rows.push(`🔗 <a href="${escapeHtml(link)}">Buka tiket ${escapeHtml(ticketNumber)}</a>`);
+  return `${headline}\n\n${rows.join('\n')}`;
+}
+
+export function formatNewTicketMessage(ticket: NewTicketNotification, appUrl = ''): string {
   const fields: Array<[string, string]> = [
-    ['🔖', `<b>${esc(ticket.ticketNumber)}</b>`],
-    ['📌', `<b>${line(ticket.title, TITLE_LIMIT)}</b>`],
-    ['👤', `${line(ticket.creatorFullName, 64)} (@${line(ticket.creatorUsername, 32)})`],
-    ['🏷️', esc(ticket.priority)],
-    ['🕒', esc(time)],
+    ['🔖', ticket.ticketNumber],
+    ['📌', ticket.title],
+    ['👤', `${ticket.creatorFullName} (@${ticket.creatorUsername})`],
+    ['🏷️', ticket.priority],
+    ['🕒', ticket.createdAt],
   ];
-  if (ticket.description.trim()) fields.push(['📝', `<i>${line(ticket.description, DESCRIPTION_LIMIT)}</i>`]);
-  if (link) fields.push(['🔗', `<a href="${esc(link)}">Buka tiket ${esc(ticket.ticketNumber)}</a>`]);
+  if (ticket.description.trim()) fields.push(['📝', ticket.description]);
+  return message(
+    `${icon(ticket.priority)} <b>TIKET BARU — ${ticket.priority.toUpperCase()}</b>`,
+    fields,
+    ticket.ticketNumber,
+    appUrl,
+  );
+}
 
-  return `${icon} <b>TIKET BARU — ${esc(ticket.priority.toUpperCase())}</b>\n\n${fields.map(([key, value]) => `${key} ${value}`).join('\n')}`;
+export function formatTicketClosedMessage(ticket: TicketClosedNotification, appUrl = ''): string {
+  const fields: Array<[string, string]> = [
+    ['🔖', ticket.ticketNumber],
+    ['📌', ticket.title],
+    ['🏷️', ticket.priority],
+    ['✅', `Ditutup oleh ${ticket.resolverFullName} (@${ticket.resolverUsername})`],
+    ['🕒', ticket.closedAt],
+  ];
+  if (ticket.solution.trim()) fields.push(['🛠️', ticket.solution]);
+  return message('✅ <b>TIKET SELESAI / DITUTUP</b>', fields, ticket.ticketNumber, appUrl);
+}
+
+export function formatTicketReplyMessage(reply: TicketReplyNotification, appUrl = ''): string {
+  const fromStaff = reply.senderRole === 'IT Staff' || reply.senderRole === 'Super Admin';
+  const fields: Array<[string, string]> = [
+    ['🔖', reply.ticketNumber],
+    ['📌', reply.title],
+    ['👤', `${reply.senderFullName} (@${reply.senderUsername}) · ${reply.senderRole}`],
+    ['🕒', reply.createdAt],
+  ];
+  if (reply.messageText.trim()) fields.push(['💬', reply.messageText]);
+  return message(
+    `💬 <b>BALASAN BARU — ${fromStaff ? 'DARI TIM IT' : 'DARI PELAPOR'}</b>`,
+    fields,
+    reply.ticketNumber,
+    appUrl,
+  );
 }
 
 /**
@@ -139,18 +209,21 @@ export function createTelegramNotifier(
   }
 
   return {
-    notifyNewTicket(ticket) {
-      if (closed) return Promise.resolve();
-      const text = formatNewTicketMessage(ticket, appUrl);
-      const run = chain.then(async () => {
-        await Promise.all(config.chatIds.map((chatId) => send(chatId, text)));
-      });
-      chain = run.catch(() => {});
-      return run;
-    },
+    notifyNewTicket: (ticket) => enqueue(formatNewTicketMessage(ticket, appUrl)),
+    notifyTicketClosed: (ticket) => enqueue(formatTicketClosedMessage(ticket, appUrl)),
+    notifyTicketReply: (reply) => enqueue(formatTicketReplyMessage(reply, appUrl)),
     async close() {
       closed = true;
       await chain;
     },
   };
+
+  function enqueue(text: string): Promise<void> {
+    if (closed) return Promise.resolve();
+    const run = chain.then(async () => {
+      await Promise.all(config.chatIds.map((chatId) => send(chatId, text)));
+    });
+    chain = run.catch(() => {});
+    return run;
+  }
 }
