@@ -65,6 +65,14 @@
   padding: 0;
 }
 
+/* Densitas UI: satu nilai menyusutkan seluruh aplikasi 10% (teks, tombol, padding, tabel),
+   termasuk style di dalam komponen Svelte. zoom dipakai, bukan font-size, karena jarak/ukuran
+   di CSS masih memakai px — sedangkan rem tetap menghormati pengaturan huruf pengguna.
+   Ubah angka ini saja untuk mengatur ulang densitas (0.85 lebih kecil, 1 seperti semula). */
+html {
+  zoom: 0.9;
+}
+
 html, body, #app {
   height: 100%;
   overflow-x: hidden;
