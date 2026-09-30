@@ -12,8 +12,8 @@ export async function bootstrapAdmin(env: AdminBootstrapEnv, sql: SQL) {
     throw new Error('ADMIN_USERNAME dan ADMIN_PASSWORD wajib disediakan.');
   }
 
-  if (password.length < 12) {
-    throw new Error('ADMIN_PASSWORD minimal 12 karakter.');
+  if (password.length < 8) {
+    throw new Error('ADMIN_PASSWORD minimal 8 karakter.');
   }
 
   const existing = await sql`

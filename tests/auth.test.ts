@@ -26,7 +26,7 @@ describe('Auth validation and hashing', () => {
     });
     expect(res.valid).toBe(false);
     if (!res.valid) {
-      expect(res.errors.password).toBe('Password minimal 12 karakter.');
+      expect(res.errors.password).toBe('Password minimal 8 karakter.');
     }
   });
 

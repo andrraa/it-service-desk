@@ -145,7 +145,7 @@
         id="password"
         type="password"
         bind:value={password}
-        placeholder="Minimal 12 karakter"
+        placeholder="Minimal 8 karakter"
         required
         disabled={isSubmitting}
         class:input-error={Boolean(errors.password)}
@@ -155,7 +155,7 @@
       {#if errors.password}
         <span id="password-error" class="field-error">{errors.password}</span>
       {:else}
-        <span id="password-hint" class="field-hint">Minimal 12 karakter untuk keamanan akun.</span>
+        <span id="password-hint" class="field-hint">Minimal 8 karakter untuk keamanan akun.</span>
       {/if}
     </div>
 

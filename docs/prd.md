@@ -145,7 +145,7 @@ Akun yang dinonaktifkan tidak dapat login.
 
 - Username harus unik tanpa membedakan huruf besar dan kecil.
 - Username dan password wajib diisi.
-- **Usulan:** Password minimal 12 karakter; spasi, paste, dan password manager diperbolehkan.
+- Password minimal 8 karakter; spasi, paste, dan password manager diperbolehkan.
 - Password disimpan dalam bentuk hash, bukan teks asli.
 - Login dan registrasi memiliki pembatasan percobaan.
 - User dapat logout dan mengganti password sendiri.

@@ -27,8 +27,8 @@
       return;
     }
 
-    if (newPassword.length < 12) {
-      errors = { newPassword: 'Password baru minimal 12 karakter.' };
+    if (newPassword.length < 8) {
+      errors = { newPassword: 'Password baru minimal 8 karakter.' };
       return;
     }
 
@@ -107,14 +107,14 @@
         id="new-pass"
         type="password"
         bind:value={newPassword}
-        placeholder="Minimal 12 karakter"
+        placeholder="Minimal 8 karakter"
         required
         disabled={isSubmitting}
       />
       {#if errors.newPassword}
         <span class="field-error">{errors.newPassword}</span>
       {/if}
-      <span class="field-hint">Gunakan minimal 12 karakter campuran huruf, angka, atau simbol.</span>
+      <span class="field-hint">Gunakan minimal 8 karakter campuran huruf, angka, atau simbol.</span>
     </div>
 
     <div class="form-group">

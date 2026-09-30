@@ -58,8 +58,8 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
     errors.password = 'Password wajib diisi.';
   } else if (password.length > 1024) {
     errors.password = 'Password maksimal 1024 karakter.';
-  } else if (password.length < 12) {
-    errors.password = 'Password minimal 12 karakter.';
+  } else if (password.length < 8) {
+    errors.password = 'Password minimal 8 karakter.';
   }
 
   if (Object.keys(errors).length > 0) {

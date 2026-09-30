@@ -24,8 +24,8 @@ export function validateChangePasswordInput(
 
   if (typeof newPassword !== 'string' || newPassword === '') {
     errors.newPassword = 'Password baru wajib diisi.';
-  } else if (newPassword.length < 12) {
-    errors.newPassword = 'Password baru minimal 12 karakter.';
+  } else if (newPassword.length < 8) {
+    errors.newPassword = 'Password baru minimal 8 karakter.';
   }
 
   if (currentPassword && newPassword && currentPassword === newPassword) {

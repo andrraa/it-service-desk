@@ -20,7 +20,7 @@ describe('Super Admin Bootstrap Script', () => {
     expect(bootstrapAdmin({
       ADMIN_USERNAME: 'superadmin',
       ADMIN_PASSWORD: 'short',
-    }, mockSql)).rejects.toThrow('minimal 12 karakter');
+    }, mockSql)).rejects.toThrow('minimal 8 karakter');
   });
 
   test('creates new Super Admin when none exists', async () => {

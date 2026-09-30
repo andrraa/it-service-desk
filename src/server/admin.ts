@@ -38,7 +38,7 @@ export function validateCreateITStaffInput(input: unknown): { valid: true; data:
     errors.username = 'Username harus 3-32 karakter (hanya huruf, angka, titik, underscore, tanda hubung).';
   }
 
-  const pass = typeof temporaryPassword === 'string' && temporaryPassword.trim().length >= 12
+  const pass = typeof temporaryPassword === 'string' && temporaryPassword.trim().length >= 8
     ? temporaryPassword.trim()
     : generateTemporaryPassword();
 
