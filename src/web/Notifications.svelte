@@ -20,7 +20,8 @@
     const response = await fetch('/api/notifications');
     if (!response.ok) return;
     const data = await response.json();
-    notifications = data.notifications || [];
+    // Notifikasi yang sudah dibuka tidak muncul lagi di panel.
+    notifications = (data.notifications || []).filter((n: Notification) => !n.readAt);
     unreadCount = data.unreadCount || 0;
   }
 
