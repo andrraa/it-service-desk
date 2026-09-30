@@ -155,12 +155,14 @@ SMTP_SECURE=            # kosongkan; 465 otomatis TLS
 SMTP_USER=helpdesk
 SMTP_PASSWORD=********
 SMTP_FROM="IT Service Desk <helpdesk@perusahaan.com>"
+SMTP_TLS_INSECURE=     # isi true hanya bila relay memakai sertifikat self-signed
 ```
 ```bash
 docker compose -f docker-compose.prod.yml up -d   # tanpa --build; hanya environment
 ```
 - `SMTP_HOST` kosong → fitur mati, tombol "Kirim Email" tidak dirender (flagnya ikut di `/api/auth/me`).
 - Konfigurasi setengah jalan (mis. `SMTP_USER` tanpa `SMTP_PASSWORD`, `SMTP_FROM` kosong, port tidak valid) → server **gagal start** dengan pesan jelas, bukan diam-diam tidak bisa mengirim.
+- `SMTP_TLS_INSECURE=true` mematikan verifikasi sertifikat TLS; pakai **hanya** untuk relay internal (mis. self-signed `CN=BIJKTEXC02`), bukan relay publik.
 
 ### B. Perilaku pengiriman
 - Pengiriman **synchronous**: respons API menunggu relay (timeout 10 s koneksi / 15 s socket), agar staf langsung tahu berhasil atau gagal.

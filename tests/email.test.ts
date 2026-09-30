@@ -27,6 +27,12 @@ describe('readMailerConfig', () => {
     expect(() => readMailerConfig({ ...baseEnv, SMTP_FROM: 'a@b.c\r\nBcc: x@y.z' })).toThrow('baris baru');
   });
 
+  test('skips TLS verification only when explicitly asked', () => {
+    expect(readMailerConfig(baseEnv)).toMatchObject({ tlsInsecure: false });
+    expect(readMailerConfig({ ...baseEnv, SMTP_TLS_INSECURE: 'true' })).toMatchObject({ tlsInsecure: true });
+    expect(() => readMailerConfig({ ...baseEnv, SMTP_TLS_INSECURE: 'yes' })).toThrow('SMTP_TLS_INSECURE');
+  });
+
   test('falls back to the authenticated user as sender', () => {
     expect(readMailerConfig({ SMTP_HOST: 'relay.local', SMTP_USER: 'helpdesk', SMTP_PASSWORD: 'p' }))
       .toMatchObject({ from: 'helpdesk' });
@@ -84,7 +90,7 @@ describe('createMailer', () => {
   test('hands the composed message to the transport and forwards failures', async () => {
     const sent: any[] = [];
     const mailer = createMailer(
-      { host: 'relay.local', port: 587, secure: false, from: 'helpdesk@perusahaan.com' },
+      { host: 'relay.local', port: 587, secure: false, from: 'helpdesk@perusahaan.com', tlsInsecure: false },
       { transport: { sendMail: async (msg: any) => { sent.push(msg); }, close: () => {} } as any },
     );
 
@@ -93,7 +99,7 @@ describe('createMailer', () => {
     expect(sent[0]).toMatchObject({ from: 'helpdesk@perusahaan.com', to: 'budi@perusahaan.com', subject: 'Tindak lanjut', text: 'Halo' });
 
     const failing = createMailer(
-      { host: 'relay.local', port: 587, secure: false, from: 'a@b.com' },
+      { host: 'relay.local', port: 587, secure: false, from: 'a@b.com', tlsInsecure: false },
       { transport: { sendMail: async () => { throw Object.assign(new Error('nope'), { code: 'EAUTH' }); }, close: () => {} } as any },
     );
     expect(failing.send({ to: 'x@y.com', subject: 's', body: 'b' })).rejects.toThrow('nope');

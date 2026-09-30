@@ -7,6 +7,8 @@ export interface MailerConfig {
   user?: string;
   password?: string;
   from: string;
+  /** Internal relay with a self-signed certificate: skip TLS verification. */
+  tlsInsecure: boolean;
 }
 
 export interface OutboundEmail {
@@ -62,7 +64,12 @@ export function readMailerConfig(env: Record<string, string | undefined>): Maile
     throw new Error('SMTP_FROM tidak boleh mengandung baris baru.');
   }
 
-  return { host, port, secure, user, password, from };
+  const insecureRaw = env.SMTP_TLS_INSECURE?.trim().toLowerCase() ?? '';
+  if (insecureRaw && !['true', 'false', '1', '0'].includes(insecureRaw)) {
+    throw new Error('SMTP_TLS_INSECURE harus true atau false.');
+  }
+
+  return { host, port, secure, user, password, from, tlsInsecure: insecureRaw === 'true' || insecureRaw === '1' };
 }
 
 export function validateEmailInput(input: unknown): { valid: true; data: OutboundEmail } | { valid: false; errors: Record<string, string> } {
@@ -113,6 +120,7 @@ export function createMailer(config: MailerConfig, options: { transport?: Transp
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
     socketTimeout: 15_000,
+    tls: config.tlsInsecure ? { rejectUnauthorized: false } : undefined,
   });
 
   return {
