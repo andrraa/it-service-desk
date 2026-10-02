@@ -132,3 +132,44 @@ describe('Admin sets a user email (Live PostgreSQL)', () => {
     }
   });
 });
+
+// Every role needs to set its own address, otherwise notifications never reach anyone.
+describe('Self-service email (Live PostgreSQL)', () => {
+  test('each user saves their own email, and cannot steal another account\'s', async () => {
+    const sql = await openTestDatabase();
+    try {
+      const hash = await hashPassword('password_super_aman_123');
+      await sql`INSERT INTO users (username, full_name, email, password_hash, role) VALUES
+        ('self_user', 'Self User', NULL, ${hash}, 'User'),
+        ('self_it', 'Self IT', 'diambil@perusahaan.com', ${hash}, 'IT Staff')`;
+      await sql`INSERT INTO sessions (id, user_id, expires_at) VALUES
+        ('self_sess_user', (SELECT id FROM users WHERE username = 'self_user'), NOW() + INTERVAL '1 day'),
+        ('self_sess_it', (SELECT id FROM users WHERE username = 'self_it'), NOW() + INTERVAL '1 day')`;
+
+      const save = (session: string, body: unknown) => handleRequest(new Request('http://localhost/api/auth/email', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch', Cookie: `session_id=${session}` },
+        body: JSON.stringify(body),
+      }), { sql });
+
+      expect((await save('', { email: 'x@perusahaan.com' })).status).toBe(401);
+      expect((await save('self_sess_user', { email: 'bukan-email' })).status).toBe(422);
+      expect((await save('self_sess_user', { email: '' })).status).toBe(422);
+      // Already owned by self_it.
+      expect((await save('self_sess_user', { email: 'diambil@perusahaan.com' })).status).toBe(409);
+
+      const ok = await save('self_sess_user', { email: 'pelapor@perusahaan.com' });
+      expect(ok.status).toBe(200);
+      expect((await sql`SELECT email FROM users WHERE username = 'self_user'`)[0]!.email).toBe('pelapor@perusahaan.com');
+
+      // Re-saving your own address is allowed, not treated as a conflict.
+      expect((await save('self_sess_user', { email: 'pelapor@perusahaan.com' })).status).toBe(200);
+
+      // A staff member can also set their own.
+      expect((await save('self_sess_it', { email: 'it.baru@perusahaan.com' })).status).toBe(200);
+      expect((await sql`SELECT email FROM users WHERE username = 'self_it'`)[0]!.email).toBe('it.baru@perusahaan.com');
+    } finally {
+      await closeTestDatabase(sql);
+    }
+  });
+});

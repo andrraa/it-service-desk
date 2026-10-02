@@ -16,6 +16,41 @@
   let successMessage = $state('');
   let isSubmitting = $state(false);
 
+  // Notification address: separate form and endpoint so it can be saved without a password.
+  // svelte-ignore state_referenced_locally
+  let email = $state(currentUser.email ?? '');
+  let emailErrors = $state<Record<string, string>>({});
+  let emailError = $state('');
+  let emailSuccess = $state('');
+  let isSavingEmail = $state(false);
+
+  async function handleSaveEmail(e: Event) {
+    e.preventDefault();
+    emailErrors = {};
+    emailError = '';
+    emailSuccess = '';
+    isSavingEmail = true;
+    try {
+      const res = await fetch('/api/auth/email', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify({ email }),
+      });
+      const data: any = await res.json();
+      if (!res.ok) {
+        if (data.error?.details) emailErrors = data.error.details;
+        else emailError = data.error?.message || 'Gagal menyimpan email.';
+        return;
+      }
+      email = data.user.email;
+      emailSuccess = 'Email berhasil disimpan. Notifikasi tiket akan dikirim ke alamat ini.';
+    } catch {
+      emailError = 'Terjadi gangguan jaringan saat menghubungi server.';
+    } finally {
+      isSavingEmail = false;
+    }
+  }
+
   async function handleSubmit(e: Event) {
     e.preventDefault();
     errors = {};
@@ -72,9 +107,41 @@
 <div class="password-view">
 <div class="password-card">
   <div class="password-header">
-    <h1>Ganti Password</h1>
-    <p class="password-sub">{currentUser.mustChangePassword ? 'Buat password baru untuk melanjutkan.' : 'Masukkan password lama dan password baru.'}</p>
+    <h1>Pengaturan Akun</h1>
+    <p class="password-sub">{currentUser.mustChangePassword ? 'Buat password baru untuk melanjutkan.' : 'Kelola email notifikasi dan password akun Anda.'}</p>
   </div>
+
+  {#if emailSuccess}
+    <div class="alert alert-success" role="status">{emailSuccess}</div>
+  {/if}
+  {#if emailError}
+    <div class="alert alert-error" role="alert">{emailError}</div>
+  {/if}
+
+  <form onsubmit={handleSaveEmail} class="password-form" style="margin-bottom: 28px;">
+    <div class="form-group">
+      <label for="account-email">Email Notifikasi <span class="required-mark" aria-hidden="true">*</span></label>
+      <input
+        id="account-email"
+        type="email"
+        bind:value={email}
+        placeholder="Contoh: nama@perusahaan.com"
+        required
+        autocomplete="email"
+        disabled={isSavingEmail}
+        aria-invalid={Boolean(emailErrors.email)}
+      />
+      {#if emailErrors.email}
+        <span class="field-error">{emailErrors.email}</span>
+      {:else}
+        <span class="field-hint">Dipakai untuk notifikasi tiket dan balasan. Bisa diubah kapan saja.</span>
+      {/if}
+    </div>
+
+    <button type="submit" class="btn btn-primary" disabled={isSavingEmail}>
+      {isSavingEmail ? 'Menyimpan…' : 'Simpan Email'}
+    </button>
+  </form>
 
   {#if generalError}
     <div class="alert alert-error" role="alert">{generalError}</div>

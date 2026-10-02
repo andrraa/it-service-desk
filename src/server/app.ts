@@ -414,6 +414,48 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     return user;
   };
 
+  // Update Own Email: PATCH /api/auth/email
+  // Self-service so every role can receive ticket notifications without asking an admin.
+  if (pathname === '/api/auth/email') {
+    const user = await getAuthUser(true);
+    if (!user) {
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Silakan masuk terlebih dahulu.' } }, 401);
+    }
+    if (request.method !== 'PATCH') {
+      return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Metode tidak diizinkan.' } }, 405, { Allow: 'PATCH' });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: { code: 'BAD_REQUEST', message: 'Format data JSON tidak valid.' } }, 400);
+    }
+
+    const emailError = emailFieldError((body as Record<string, unknown>)?.email);
+    if (emailError) {
+      return json({ error: { code: 'VALIDATION_ERROR', message: emailError, details: { email: emailError } } }, 422);
+    }
+
+    const email = String((body as Record<string, unknown>).email).trim();
+
+    try {
+      // One mailbox per account, otherwise notifications would be ambiguous.
+      const taken = await ctx.sql`
+        SELECT id FROM users WHERE LOWER(email) = LOWER(${email}) AND id <> ${user.id} LIMIT 1
+      `;
+      if (taken.length > 0) {
+        return json({ error: { code: 'CONFLICT', message: 'Email sudah digunakan akun lain.', details: { email: 'Email sudah digunakan akun lain.' } } }, 409);
+      }
+
+      await ctx.sql`UPDATE users SET email = ${email}, updated_at = NOW() WHERE id = ${user.id}`;
+      return json({ message: 'Email berhasil disimpan.', user: { ...user, email } });
+    } catch (err) {
+      console.error('Update email error:', err instanceof Error ? err.name : 'UnknownError');
+      return json({ error: { code: 'INTERNAL_ERROR', message: 'Gagal menyimpan email.' } }, 500);
+    }
+  }
+
   // Change Password Endpoint: POST /api/auth/change-password
   if (pathname === '/api/auth/change-password') {
     const user = await getAuthUser(true);
@@ -482,6 +524,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     '/api/auth/logout',
     '/api/auth/me',
     '/api/auth/change-password',
+    '/api/auth/email',
   ].includes(pathname);
 
   if (!isExcludedFromRestriction) {

@@ -156,7 +156,11 @@ Begitu `SMTP_HOST` diisi, tiga email dikirim otomatis tanpa aksi staf:
 
 Semuanya *fire-and-forget*: kegagalan relay dicatat di log (`Email notify error:`) dan **tidak** membatalkan registrasi, pembuatan tiket, atau balasan. Notifikasi Telegram tidak berubah (lihat bagian 4).
 
-**Email wajib diisi** saat registrasi dan saat Super Admin membuat akun IT Staff, agar notifikasi punya tujuan. Kolom `users.email` nullable di database supaya akun lama tetap valid; isi lewat modal edit pengguna di halaman Admin, atau `ADMIN_EMAIL` pada `scripts/bootstrap-admin.ts`.
+**Email wajib diisi** saat registrasi dan saat Super Admin membuat akun IT Staff, agar notifikasi punya tujuan.
+
+Pengguna dapat mengisi atau mengubah emailnya sendiri lewat halaman **Pengaturan Akun** (menu akun di kanan atas, halaman yang sama dengan Ganti Password) — berlaku untuk semua peran, dan tidak perlu menunggu admin. Super Admin juga bisa mengisikannya untuk siapa pun lewat kolom Email di halaman Admin, berguna untuk akun lama yang dibuat sebelum email diwajibkan.
+
+Kolom `users.email` nullable di database supaya akun lama tetap valid, dan satu alamat tidak boleh dipakai dua akun. Saat bootstrap, `ADMIN_EMAIL` pada `scripts/bootstrap-admin.ts` dapat langsung mengisi email Super Admin pertama.
 
 ### B. Kirim Tiket via Email (manual)
 Staf IT / Super Admin dapat mengirim tiket ke email penerima melalui tombol **Kirim Email** (tersedia di detail tiket untuk semua status, dan di kolom aksi antrean IT). Penerima, subjek, dan isi pesan diisi manual; subjek dan isi terisi otomatis dari tiket + solusinya dan bisa diedit sebelum dikirim. **Kolom "Kepada" terisi otomatis dari email pelapor** bila ia sudah mendaftarkan email, dan tetap bisa diganti ke alamat lain. Pesan berupa teks biasa tanpa lampiran.
