@@ -159,7 +159,7 @@ Semuanya *fire-and-forget*: kegagalan relay dicatat di log (`Email notify error:
 **Email wajib diisi** saat registrasi dan saat Super Admin membuat akun IT Staff, agar notifikasi punya tujuan. Kolom `users.email` nullable di database supaya akun lama tetap valid; isi lewat modal edit pengguna di halaman Admin, atau `ADMIN_EMAIL` pada `scripts/bootstrap-admin.ts`.
 
 ### B. Kirim Tiket via Email (manual)
-Staf IT / Super Admin dapat mengirim tiket ke email penerima melalui tombol **Kirim Email** (tersedia di detail tiket untuk semua status, dan di kolom aksi antrean IT). Penerima, subjek, dan isi pesan diisi manual; subjek dan isi terisi otomatis dari tiket + solusinya dan bisa diedit sebelum dikirim. Pesan berupa teks biasa tanpa lampiran.
+Staf IT / Super Admin dapat mengirim tiket ke email penerima melalui tombol **Kirim Email** (tersedia di detail tiket untuk semua status, dan di kolom aksi antrean IT). Penerima, subjek, dan isi pesan diisi manual; subjek dan isi terisi otomatis dari tiket + solusinya dan bisa diedit sebelum dikirim. **Kolom "Kepada" terisi otomatis dari email pelapor** bila ia sudah mendaftarkan email, dan tetap bisa diganti ke alamat lain. Pesan berupa teks biasa tanpa lampiran.
 
 ### C. Konfigurasi
 ```bash

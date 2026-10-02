@@ -603,6 +603,7 @@
   {#if emailTicket}
     <EmailTicketModal
       ticketNumber={emailTicket.ticketNumber}
+      initialTo={emailTicket.creatorEmail ?? ''}
       initialSubject={emailDraft.subject}
       initialBody={emailDraft.body}
       onClose={() => (emailTicket = null)}

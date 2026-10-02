@@ -36,6 +36,41 @@ describe('notification emails', () => {
     expect(sent[0]!.body).toContain(`${appUrl}/tickets/TKT-000042`);
   });
 
+  test('the reporter is kept in the loop via bcc', async () => {
+    const { sent, mailer, staff } = collector();
+    await sendNewTicketEmail(staff(['it@perusahaan.com']), mailer, {
+      ticketNumber: 'TKT-000042', title: 'Printer macet', description: 'Tidak bisa mencetak.', priority: 'High',
+      creatorFullName: 'Budi Santoso', creatorUsername: 'budi', creatorEmail: 'budi@perusahaan.com', createdAt: new Date().toISOString(),
+    }, appUrl);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: 'it@perusahaan.com', bcc: ['budi@perusahaan.com'] });
+  });
+
+  test('a staff member creating their own ticket is not listed twice', async () => {
+    const { sent, mailer, staff } = collector();
+    await sendNewTicketEmail(staff(['it@perusahaan.com', 'budi@perusahaan.com']), mailer, {
+      ticketNumber: 'TKT-000042', title: 'Printer macet', description: 'Tidak bisa mencetak.', priority: 'High',
+      creatorFullName: 'Budi', creatorUsername: 'budi', creatorEmail: 'budi@perusahaan.com', createdAt: new Date().toISOString(),
+    }, appUrl);
+
+    expect(sent[0]!.bcc).toEqual(['budi@perusahaan.com']);
+    // Case-insensitive, because the same mailbox may be stored with different casing.
+    expect(sent[0]!.to).not.toBe('budi@perusahaan.com');
+  });
+
+  test('a reporter without an address still notifies staff', async () => {
+    const { sent, mailer, staff } = collector();
+    await sendNewTicketEmail(staff(['it@perusahaan.com']), mailer, {
+      ticketNumber: 'TKT-000042', title: 'Printer macet', description: 'Tidak bisa mencetak.', priority: 'High',
+      creatorFullName: 'Budi', creatorUsername: 'budi', creatorEmail: null, createdAt: new Date().toISOString(),
+    }, appUrl);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: 'it@perusahaan.com' });
+    expect(sent[0]!.bcc).toBeUndefined();
+  });
+
   test('reply mail reaches the counterparty, and is skipped without an address', () => {
     const { sent, mailer } = collector();
     const reply = { ticketNumber: 'TKT-000042', title: 'Printer macet', messageText: 'Toner habis.', senderFullName: 'Siti IT', senderRole: 'IT Staff' };

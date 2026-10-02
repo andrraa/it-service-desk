@@ -3,14 +3,17 @@
 
   interface Props {
     ticketNumber: string;
+    initialTo?: string;
     initialSubject: string;
     initialBody: string;
     onClose: () => void;
   }
 
-  let { ticketNumber, initialSubject, initialBody, onClose }: Props = $props();
+  let { ticketNumber, initialTo = '', initialSubject, initialBody, onClose }: Props = $props();
 
-  let to = $state('');
+  // Prefilled with the reporter's registered address, but always editable — the agent owns the recipient.
+  // svelte-ignore state_referenced_locally
+  let to = $state(initialTo);
   // Prefilled once from the ticket, then fully editable: the agent owns the final text.
   // svelte-ignore state_referenced_locally
   let subject = $state(initialSubject);
@@ -38,7 +41,7 @@
       }
       // Keep the dialog open on success so the agent sees the confirmation.
       successMessage = data?.message || `Email berhasil dikirim ke ${to}.`;
-      to = '';
+      to = initialTo;
     } catch (err: any) {
       errorMessage = err.message || 'Gagal mengirim email.';
     } finally {
@@ -74,6 +77,13 @@
     <div class="form-group">
       <label for="email-to">Kepada <span class="required-mark" aria-hidden="true">*</span></label>
       <input id="email-to" type="email" bind:value={to} placeholder="nama@perusahaan.com" required disabled={isSending} />
+      <span class="field-hint">
+        {#if initialTo}
+          Terisi otomatis dari email pelapor. Ubah bila perlu dikirim ke alamat lain.
+        {:else}
+          Pelapor belum punya email terdaftar — isi alamat tujuan secara manual.
+        {/if}
+      </span>
     </div>
 
     <div class="form-group">

@@ -16,6 +16,8 @@ export interface Ticket {
   ticketNumber: string;
   creatorId: string;
   creatorUsername?: string;
+  /** Reporter's address; prefills the manual email form and receives the new-ticket mail. */
+  creatorEmail?: string | null;
   assigneeId?: string | null;
   assigneeUsername?: string | null;
   title: string;

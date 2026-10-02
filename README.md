@@ -17,7 +17,7 @@ Dokumentasi terkait:
 - Manajemen pengguna, staf IT, status akun, serta reset password oleh Super Admin.
 - Antarmuka responsif dengan Light Mode dan Dark Mode.
 - Notifikasi Telegram untuk tiket baru (opsional, lihat [panduan operasional](docs/operations.md#2-notifikasi-telegram-untuk-tiket-baru)).
-- Notifikasi email otomatis: selamat datang saat registrasi, tiket baru ke seluruh staf IT, dan balasan dua arah (opsional, lihat [panduan operasional](docs/operations.md#3-email-opsional)).
+- Notifikasi email otomatis: selamat datang saat registrasi, tiket baru ke seluruh staf IT sekaligus pelapor (berisi tautan tiketnya), dan balasan dua arah (opsional, lihat [panduan operasional](docs/operations.md#3-email-opsional)).
 - Kirim tiket ke email penerima secara manual pada status apa pun (opsional, panduan yang sama).
 
 ## Teknologi

@@ -346,6 +346,7 @@
   {#if showEmailModal && ticket}
     <EmailTicketModal
       ticketNumber={ticket.ticketNumber}
+      initialTo={ticket.creatorEmail ?? ''}
       initialSubject={emailDraft.subject}
       initialBody={emailDraft.body}
       onClose={() => (showEmailModal = false)}

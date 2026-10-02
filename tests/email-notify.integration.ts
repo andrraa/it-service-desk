@@ -55,12 +55,28 @@ describe('Automatic notification emails (Live PostgreSQL)', () => {
     const ticket = { title: 'Tiket Notif', description: 'Printer di lantai 3 tidak bisa mencetak.', priority: 'High', requestId: uuid() };
     expect((await post('/api/tickets', 'notif_sess_user', ticket)).status).toBe(201);
     await settle(1);
-    expect(sent.map((m) => m.bcc)).toEqual([['staff2@perusahaan.com']]);
+    // First recipient is the staff member; the reporter is blind-copied so they get the link too.
+    expect(sent.map((m) => m.to)).toEqual(['staff1@perusahaan.com']);
+    expect(sent.map((m) => m.bcc)).toEqual([['staff2@perusahaan.com', 'pelapor@perusahaan.com']]);
     expect(sent[0]!.body).toContain('Tiket Notif');
 
     await post('/api/tickets', 'notif_sess_user', ticket);
     await settle(2);
     expect(sent).toHaveLength(1);
+  }));
+
+  test('the reporter can be looked up so the manual email form prefills their address', () => withDb(async () => {
+    const hash = await hashPassword(pass);
+    await sql`INSERT INTO users (username, full_name, email, password_hash, role) VALUES
+      ('pref_user', 'Prefill User', 'prefill@perusahaan.com', ${hash}, 'User'),
+      ('pref_it', 'Prefill IT', 'pref_it@perusahaan.com', ${hash}, 'IT Staff')`;
+    const [ticket] = await sql`INSERT INTO tickets (ticket_number, creator_id, title, description, priority, status)
+      VALUES ('PREF-1', (SELECT id FROM users WHERE username = 'pref_user'), 'Prefill Tiket', 'Deskripsi panjang.', 'Medium', 'Open') RETURNING id`;
+    await sql`INSERT INTO sessions (id, user_id, expires_at) VALUES ('pref_sess_it', (SELECT id FROM users WHERE username = 'pref_it'), NOW() + INTERVAL '1 day')`;
+
+    const res = await handleRequest(new Request(`http://localhost/api/tickets/${ticket.id}`, { headers: { Cookie: 'session_id=pref_sess_it' } }), { sql });
+    expect(res.status).toBe(200);
+    expect((await res.json() as any).ticket.creatorEmail).toBe('prefill@perusahaan.com');
   }));
 
   test('replies are mailed to the other party in both directions', () => withDb(async () => {

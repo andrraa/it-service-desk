@@ -612,6 +612,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
           t.creator_id AS "creatorId", 
           u.username AS "creatorUsername",
           COALESCE(u.full_name, u.username) AS "creatorFullName",
+          u.email AS "creatorEmail",
           t.assignee_id AS "assigneeId",
           a.username AS "assigneeUsername",
           t.title, 
@@ -1392,6 +1393,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
             priority: newTicket.priority,
             creatorFullName: user.fullName || user.username,
             creatorUsername: user.username,
+            creatorEmail: user.email,
             createdAt: String(newTicket.createdAt),
           }, options.appUrl).catch((err) => console.error('Email notify error:', err instanceof Error ? err.name : 'UnknownError'));
         }
@@ -1493,6 +1495,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
           t.creator_id AS "creatorId", 
           u.username AS "creatorUsername",
           COALESCE(u.full_name, u.username) AS "creatorFullName",
+          u.email AS "creatorEmail",
           t.assignee_id AS "assigneeId",
           a.username AS "assigneeUsername",
           t.title, 

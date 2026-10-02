@@ -42,11 +42,11 @@ export function sendWelcomeEmail(mailer: Mailer | undefined, user: { email: stri
   send(mailer, { to: user.email, subject: 'Pendaftaran akun IT Service Desk berhasil', body: lines.join('\n') });
 }
 
-/** One mail per new ticket, blind-copied to every active IT Staff and Super Admin. */
+/** One mail per new ticket: staff notified, reporter kept in the loop via bcc. */
 export async function sendNewTicketEmail(
   sql: SQL,
   mailer: Mailer | undefined,
-  ticket: { ticketNumber: string; title: string; description: string; priority: string; creatorFullName: string; creatorUsername: string; createdAt: string },
+  ticket: { ticketNumber: string; title: string; description: string; priority: string; creatorFullName: string; creatorUsername: string; creatorEmail?: string | null; createdAt: string },
   appUrl = '',
 ): Promise<void> {
   if (!mailer) return;
@@ -54,8 +54,17 @@ export async function sendNewTicketEmail(
     SELECT email FROM users
     WHERE role IN ('IT Staff', 'Super Admin') AND is_active = TRUE AND email IS NOT NULL AND email <> ''
   `;
-  const emails = rows.map((row: { email: string }) => String(row.email));
-  if (emails.length === 0) return;
+
+  // Reporter is added so they get a confirmation with the ticket link. Deduplicated
+  // because a staff member may create a ticket themselves and would otherwise appear twice.
+  const recipients: string[] = [];
+  for (const email of [...rows.map((row: { email: string }) => String(row.email)), ticket.creatorEmail ?? '']) {
+    const address = email.trim();
+    if (address && !recipients.some((existing) => existing.toLowerCase() === address.toLowerCase())) {
+      recipients.push(address);
+    }
+  }
+  if (recipients.length === 0) return;
 
   const link = ticketLink(ticket.ticketNumber, appUrl);
   const lines = [
@@ -73,8 +82,8 @@ export async function sendNewTicketEmail(
   lines.push('', 'Tim IT Service Desk');
 
   send(mailer, {
-    to: emails[0],
-    bcc: emails.slice(1),
+    to: recipients[0],
+    bcc: recipients.length > 1 ? recipients.slice(1) : undefined,
     subject: `[${ticket.ticketNumber}] Tiket baru (${ticket.priority}): ${truncate(ticket.title, 120)}`,
     body: lines.join('\n'),
   });
