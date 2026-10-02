@@ -231,6 +231,23 @@
             Tiket Saya
           </a>
         {/if}
+
+        {#if !currentUser.mustChangePassword}
+          <!-- Always reachable, so the notification email can be set without a password reset. -->
+          <a
+            href="/password"
+            class="nav-item"
+            class:active={currentRoute.view === 'password'}
+            aria-current={currentRoute.view === 'password' ? 'page' : undefined}
+            onclick={() => closeDrawer()}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.64.96.3.27.68.42 1.08.44H21v4h-.1A1.7 1.7 0 0 0 19.4 15Z" />
+            </svg>
+            Pengaturan Akun
+          </a>
+        {/if}
       </nav>
 
       <div class="sidebar-user">
