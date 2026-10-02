@@ -49,6 +49,7 @@ docker compose -f docker-compose.prod.yml up --build -d
 docker compose -f docker-compose.prod.yml exec \
   -e ADMIN_USERNAME="superadmin" \
   -e ADMIN_FULL_NAME="Super Administrator" \
+  -e ADMIN_EMAIL="helpdesk@perusahaan.com" \
   -e ADMIN_PASSWORD="ganti-dengan-password-kuat" \
   app bun run scripts/bootstrap-admin.ts
 
@@ -142,11 +143,25 @@ docker logs it-service-desk-prod | grep -i telegram
 
 ---
 
-## 3. Kirim Tiket via Email (opsional)
+## 3. Email (opsional)
 
+### A. Notifikasi otomatis
+Begitu `SMTP_HOST` diisi, tiga email dikirim otomatis tanpa aksi staf:
+
+| Peristiwa | Penerima | Catatan |
+|---|---|---|
+| Registrasi akun berhasil | Email pengguna baru | Berisi username dan tautan login. |
+| Tiket baru dibuat | Semua `IT Staff` + `Super Admin` yang punya email | **Satu** email; penerima pertama di `to`, sisanya di `bcc`. Akun tanpa email dilewati. |
+| Balasan di percakapan | Pihak seberang: pelapor → penanggung jawab, staf → pelapor | Dua arah. Tanpa penanggung jawab atau tanpa email, tidak ada yang dikirim. |
+
+Semuanya *fire-and-forget*: kegagalan relay dicatat di log (`Email notify error:`) dan **tidak** membatalkan registrasi, pembuatan tiket, atau balasan. Notifikasi Telegram tidak berubah (lihat bagian 4).
+
+**Email wajib diisi** saat registrasi dan saat Super Admin membuat akun IT Staff, agar notifikasi punya tujuan. Kolom `users.email` nullable di database supaya akun lama tetap valid; isi lewat modal edit pengguna di halaman Admin, atau `ADMIN_EMAIL` pada `scripts/bootstrap-admin.ts`.
+
+### B. Kirim Tiket via Email (manual)
 Staf IT / Super Admin dapat mengirim tiket ke email penerima melalui tombol **Kirim Email** (tersedia di detail tiket untuk semua status, dan di kolom aksi antrean IT). Penerima, subjek, dan isi pesan diisi manual; subjek dan isi terisi otomatis dari tiket + solusinya dan bisa diedit sebelum dikirim. Pesan berupa teks biasa tanpa lampiran.
 
-### A. Konfigurasi
+### C. Konfigurasi
 ```bash
 # /opt/it-service-desk/app/.env
 SMTP_HOST=relay.perusahaan.local
@@ -164,14 +179,14 @@ docker compose -f docker-compose.prod.yml up -d   # tanpa --build; hanya environ
 - Konfigurasi setengah jalan (mis. `SMTP_USER` tanpa `SMTP_PASSWORD`, `SMTP_FROM` kosong, port tidak valid) → server **gagal start** dengan pesan jelas, bukan diam-diam tidak bisa mengirim.
 - `SMTP_TLS_INSECURE=true` mematikan verifikasi sertifikat TLS; pakai **hanya** untuk relay internal (mis. self-signed `CN=BIJKTEXC02`), bukan relay publik.
 
-### B. Perilaku pengiriman
+### D. Perilaku pengiriman
 - Pengiriman **synchronous**: respons API menunggu relay (timeout 10 s koneksi / 15 s socket), agar staf langsung tahu berhasil atau gagal.
 - Tanpa retry dan tanpa antrean; kegagalan dikembalikan sebagai `502 EMAIL_SEND_FAILED` dengan pesan yang bisa ditindaklanjuti (autentikasi ditolak, relay tak terjangkau, penerima ditolak).
 - Rate limit 10 email/menit per pengguna → `429` + `Retry-After`.
 - Guard: hanya peran `IT Staff`/`Super Admin` (403); status tiket tidak dibatasi. `to`/`subject` menolak karakter baris baru (anti header injection), subjek ≤ 200 dan isi ≤ 5000 karakter.
 - Audit log mencatat `SEND_EMAIL` berisi `to`, `subject`, dan nomor tiket; **isi email tidak disimpan** (menghindari PII di audit).
 
-### C. Pemecahan masalah
+### E. Pemecahan masalah
 ```bash
 docker exec it-service-desk-prod sh -c 'echo ${SMTP_HOST}'
 docker logs it-service-desk-prod | grep -i "send ticket email"

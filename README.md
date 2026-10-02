@@ -11,13 +11,14 @@ Dokumentasi terkait:
 - Registrasi dengan nama lengkap, username, dan password.
 - Sesi aman berbasis cookie, CSRF protection, dan rate limiting.
 - Tiket bernomor otomatis dengan pencarian, filter, dan server-side pagination.
-- Antrean IT berdasarkan prioritas dan FIFO, claim tiket, serta audit perubahan.
+- Antrean IT berdasarkan prioritas dan tanggal pembuatan terbaru, claim tiket, serta audit perubahan.
 - Percakapan real-time berbasis polling, lampiran privat, dan histori tiket.
 - Penutupan tiket dengan solusi wajib dan status Closed yang read-only.
 - Manajemen pengguna, staf IT, status akun, serta reset password oleh Super Admin.
 - Antarmuka responsif dengan Light Mode dan Dark Mode.
 - Notifikasi Telegram untuk tiket baru (opsional, lihat [panduan operasional](docs/operations.md#2-notifikasi-telegram-untuk-tiket-baru)).
-- Kirim tiket ke email penerima pada status apa pun (opsional, lihat [panduan operasional](docs/operations.md#3-kirim-tiket-via-email-opsional)).
+- Notifikasi email otomatis: selamat datang saat registrasi, tiket baru ke seluruh staf IT, dan balasan dua arah (opsional, lihat [panduan operasional](docs/operations.md#3-email-opsional)).
+- Kirim tiket ke email penerima secara manual pada status apa pun (opsional, panduan yang sama).
 
 ## Teknologi
 
@@ -57,9 +58,9 @@ bun run dev:all
 
 `DATABASE_URL` wajib menunjuk PostgreSQL aplikasi. `TEST_DATABASE_URL` harus memakai database terpisah dengan nama berakhiran `_test`.
 
-Notifikasi Telegram dan kirim email bersifat opsional (lihat `.env.example`). Tanpa `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` aplikasi berjalan tanpa notifikasi; tanpa `SMTP_HOST` tombol **Kirim Email** disembunyikan.
+Notifikasi Telegram dan email bersifat opsional (lihat `.env.example`). Tanpa `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` aplikasi berjalan tanpa notifikasi Telegram; tanpa `SMTP_HOST` seluruh fitur email mati dan tombol **Kirim Email** disembunyikan. Email juga menjadi field wajib saat registrasi dan saat membuat akun staf IT, karena dipakai sebagai tujuan notifikasi.
 
-## Kirim Tiket via Email
+## Email
 
 Staf IT dan Super Admin dapat mengirim ringkasan tiket ke email penerima, **pada status apa pun**. Penerima, subjek, dan isi pesan diisi manual lewat modal (subjek dan isi sudah terisi otomatis dari tiket dan solusinya, lalu bisa diubah). Pesan dikirim sebagai teks biasa tanpa lampiran, dan tidak muncul di percakapan tiket — hanya tercatat di audit log sebagai `SEND_EMAIL`.
 

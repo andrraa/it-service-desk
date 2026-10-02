@@ -24,14 +24,14 @@ Super Admin mengelola akun karyawan IT dan membantu pemulihan akses pengguna.
 - Memberikan visibilitas status penanganan kepada pengguna.
 - Membantu IT menentukan urutan penanganan.
 - Menyimpan percakapan, lampiran, dan solusi sebagai histori.
-- Menyediakan pengelolaan akun tanpa ketergantungan pada email.
+- Menyediakan pengelolaan akun tanpa ketergantungan pada verifikasi email (email wajib untuk notifikasi, tidak untuk verifikasi).
 
 ### Indikator keberhasilan
 
 - Setiap tiket memiliki nomor unik, pemilik, prioritas, dan status.
 - Pengguna dapat mengikuti penanganan tanpa berpindah aplikasi.
 - Semua tiket Closed memiliki solusi tertulis.
-- Dashboard menampilkan antrean secara konsisten sesuai aturan urgensi dan FIFO.
+- Dashboard menampilkan antrean secara konsisten sesuai aturan urgensi dan tanggal terbaru.
 - Pemulihan password tidak membuka akses ke password lama pengguna.
 
 ## 3. Pengguna dan Hak Akses
@@ -62,13 +62,13 @@ Super Admin mengelola akun karyawan IT dan membantu pemulihan akses pengguna.
 ### Termasuk MVP
 
 1. Registrasi dan login menggunakan username serta password.
-2. Akun langsung aktif tanpa verifikasi email.
+2. Akun langsung aktif tanpa verifikasi email; alamat email wajib diisi sebagai tujuan notifikasi.
 3. Pembuatan tiket dengan prioritas manual.
 4. Penomoran tiket otomatis.
 5. Status Open, In Progress, dan Closed.
 6. Ruang percakapan pada setiap tiket.
 7. Lampiran pada tiket dan pesan.
-8. Dashboard IT dengan antrean urgensi dan FIFO.
+8. Dashboard IT dengan antrean urgensi dan tanggal terbaru.
 9. Penanggung jawab tiket.
 10. Solusi wajib sebelum penutupan tiket.
 11. Histori tiket.
@@ -76,11 +76,13 @@ Super Admin mengelola akun karyawan IT dan membantu pemulihan akses pengguna.
 13. Reset password melalui Super Admin.
 14. Pencatatan aktivitas penting.
 15. Light Mode dan Dark Mode dengan toggle penggantian tema.
+16. Notifikasi email otomatis: email selamat datang saat registrasi, pemberitahuan tiket baru ke seluruh IT Staff dan Super Admin (satu email, penerima di Bcc), serta pemberitahuan balasan dua arah antara pelapor dan penanggung jawab.
+17. Notifikasi Telegram untuk tiket baru dan balasan pelapor (tidak berubah).
 
 ### Di luar MVP — Usulan
 
 - Prioritas otomatis berbasis keyword atau AI.
-- Email, WhatsApp, dan push notification.
+- WhatsApp dan push notification.
 - SLA otomatis dan eskalasi.
 - Pembukaan kembali tiket Closed.
 - Knowledge base terpisah.
@@ -185,12 +187,12 @@ Aturan antrean default:
 
 1. Hanya tiket aktif: Open dan In Progress.
 2. Urutan prioritas: **Critical → High → Medium → Low**.
-3. Dalam prioritas yang sama, tiket paling lama dibuat muncul lebih dahulu.
+3. Dalam prioritas yang sama, tiket yang **paling baru dibuat** muncul lebih dahulu.
 4. Jika waktu sama, ID tiket menjadi penentu urutan yang konsisten.
-5. Balasan baru tidak mengubah posisi FIFO.
+5. Balasan baru tidak mengubah posisi antrean.
 6. Perubahan prioritas memperbarui posisi antrean dan dicatat dalam histori.
 
-**Penting:** FIFO berlaku **di dalam tingkat prioritas yang sama**, bukan FIFO global.
+**Penting:** Urutan "terbaru dahulu" berlaku **di dalam tingkat prioritas yang sama**, bukan lintas prioritas.
 
 IT dan Super Admin dapat mengoreksi prioritas dengan alasan yang tercatat. Panduan prioritas ditampilkan pada form agar pengguna tidak selalu memilih tingkat tertinggi.
 
@@ -295,11 +297,11 @@ Tiket Closed tersedia melalui filter atau halaman histori, tetapi tidak memenuhi
 
 | ID | User story | Acceptance criteria |
 |---|---|---|
-| US-01 | Sebagai User, saya ingin mendaftar tanpa email. | Username unik dan password valid menghasilkan akun aktif; pengguna kemudian dapat login. |
+| US-01 | Sebagai User, saya ingin mendaftar dengan email untuk menerima notifikasi. | Username unik, email valid, dan password valid menghasilkan akun aktif; pengguna kemudian dapat login. |
 | US-02 | Sebagai User, saya ingin melaporkan kendala. | Tiket valid mendapat nomor unik, status Open, dan muncul di daftar tiket saya. |
 | US-03 | Sebagai User, saya ingin mengirim bukti gambar atau file. | Lampiran valid dapat dibuka oleh pihak berhak; ukuran atau format terlarang ditolak dengan pesan jelas. |
 | US-04 | Sebagai User, saya ingin berdiskusi dengan IT. | Pesan tersimpan, tampil berurutan, dan muncul tanpa reload manual sesuai target pembaruan. |
-| US-05 | Sebagai IT, saya ingin melihat tiket mendesak dan tertua. | Critical tampil sebelum High; dua tiket High diurutkan dari waktu pembuatan paling lama. |
+| US-05 | Sebagai IT, saya ingin melihat tiket mendesak dan terbaru. | Critical tampil sebelum High; dua tiket High diurutkan dari waktu pembuatan paling baru. |
 | US-06 | Sebagai IT, saya ingin mengambil tiket. | Tiket berubah ke In Progress dan saya menjadi penanggung jawab; pengambilan bersamaan tidak menghasilkan dua pemilik. |
 | US-07 | Sebagai IT, saya ingin mendokumentasikan penyelesaian. | Penutupan tanpa solusi ditolak; penutupan valid menyimpan solusi, pelaksana, dan waktu. |
 | US-08 | Sebagai Super Admin, saya ingin mengelola tim IT. | Akun IT dapat dibuat dan dinonaktifkan tanpa menghapus histori; akun nonaktif tidak dapat mengakses aplikasi. |
@@ -417,7 +419,7 @@ Ini merupakan model konseptual, bukan kewajiban membuat satu tabel untuk setiap 
 | Topik | Usulan awal / risiko |
 |---|---|
 | Prioritas manual atau otomatis | Manual pada MVP; otomatis membutuhkan aturan dan penanganan salah klasifikasi. |
-| FIFO vs urgensi | Urgensi lebih dahulu, lalu FIFO per prioritas. Tiket prioritas rendah berisiko lama menunggu; usia tiket harus terlihat. |
+| FIFO vs urgensi | Urgensi lebih dahulu, lalu tiket terbaru per prioritas. Tiket prioritas rendah berisiko lama menunggu; usia tiket harus terlihat. |
 | Registrasi langsung aktif | Sebaiknya aplikasi internal/VPN. Jika publik, siapa pun dapat membuat akun User meski tidak dapat melihat tiket orang lain. |
 | Reset password | Hanya Super Admin yang mengeksekusi; IT Staff dapat membantu verifikasi di luar aplikasi. |
 | Lampiran | Usulan JPG, PNG, WebP, PDF; 10 MB/file; lima file/pengiriman. |
@@ -430,7 +432,7 @@ Ini merupakan model konseptual, bukan kewajiban membuat satu tabel untuk setiap 
 MVP siap diterima ketika:
 
 - Seluruh alur registrasi, login, pembuatan tiket, penanganan, percakapan, dan penutupan berhasil diuji end-to-end.
-- Urutan urgensi dan FIFO terbukti sesuai aturan.
+- Urutan urgensi dan tanggal terbaru terbukti sesuai aturan.
 - Upload, download, dan penolakan lampiran tidak valid berjalan.
 - Pengujian akses silang antar-user ditolak oleh backend.
 - Pengambilan tiket bersamaan tidak menghasilkan konflik penanggung jawab.
