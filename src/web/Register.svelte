@@ -9,6 +9,7 @@
 
   let fullName = $state('');
   let username = $state('');
+  let email = $state('');
   let password = $state('');
   let confirmPassword = $state('');
 
@@ -46,7 +47,7 @@
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName, username, password }),
+        body: JSON.stringify({ fullName, username, email, password }),
       });
 
       const data: any = await res.json();
@@ -63,6 +64,7 @@
       successMessage = 'Registrasi berhasil! Anda sekarang dapat masuk menggunakan akun baru.';
       fullName = '';
       username = '';
+      email = '';
       password = '';
       confirmPassword = '';
       setTimeout(() => {
@@ -136,6 +138,27 @@
       />
       {#if errors.username}
         <span id="username-error" class="field-error">{errors.username}</span>
+      {/if}
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email <span class="required-mark" aria-hidden="true">*</span></label>
+      <input
+        id="email"
+        type="email"
+        bind:value={email}
+        placeholder="Contoh: john.doe@perusahaan.com"
+        required
+        autocomplete="email"
+        disabled={isSubmitting}
+        class:input-error={Boolean(errors.email)}
+        aria-invalid={Boolean(errors.email)}
+        aria-describedby={errors.email ? 'email-error' : 'email-hint'}
+      />
+      {#if errors.email}
+        <span id="email-error" class="field-error">{errors.email}</span>
+      {:else}
+        <span id="email-hint" class="field-hint">Dipakai untuk notifikasi tiket dan balasan.</span>
       {/if}
     </div>
 

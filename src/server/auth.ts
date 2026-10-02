@@ -1,9 +1,11 @@
 import type { SQL } from 'bun';
+import { emailFieldError } from './mailer';
 
 export interface User {
   id: string;
   username: string;
   fullName: string;
+  email: string | null;
   role: 'User' | 'IT Staff' | 'Super Admin';
   isActive: boolean;
   mustChangePassword: boolean;
@@ -13,6 +15,7 @@ export interface User {
 export interface RegisterInput {
   fullName: string;
   username: string;
+  email: string;
   password: string;
 }
 
@@ -40,13 +43,16 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
     return { valid: false, errors: { _form: 'Payload tidak valid.' } };
   }
 
-  const { fullName, username, password } = input as Record<string, unknown>;
+  const { fullName, username, email, password } = input as Record<string, unknown>;
 
   if (typeof fullName !== 'string' || fullName.trim() === '') {
     errors.fullName = 'Nama lengkap wajib diisi.';
   } else if (fullName.trim().length < 2 || fullName.trim().length > 128) {
     errors.fullName = 'Nama lengkap harus antara 2 dan 128 karakter.';
   }
+
+  const emailError = emailFieldError(email);
+  if (emailError) errors.email = emailError;
 
   if (typeof username !== 'string' || username.trim() === '') {
     errors.username = 'Username wajib diisi.';
@@ -71,6 +77,7 @@ export function validateRegisterInput(input: unknown): { valid: true; data: Regi
     data: {
       fullName: toTitleCase(fullName as string),
       username: (username as string).trim(),
+      email: (email as string).trim(),
       password: password as string,
     },
   };
@@ -164,6 +171,7 @@ export async function getSessionUser(sql: SQL, token: string): Promise<User | nu
       u.id, 
       u.username, 
       COALESCE(u.full_name, u.username) AS "fullName",
+      u.email,
       u.role, 
       u.is_active AS "isActive", 
       u.must_change_password AS "mustChangePassword", 
@@ -180,6 +188,7 @@ export async function getSessionUser(sql: SQL, token: string): Promise<User | nu
     id: number | string;
     username: string;
     fullName: string;
+    email: string | null;
     role: 'User' | 'IT Staff' | 'Super Admin';
     isActive: boolean;
     mustChangePassword: boolean;
@@ -190,6 +199,7 @@ export async function getSessionUser(sql: SQL, token: string): Promise<User | nu
     id: String(row.id),
     username: row.username,
     fullName: row.fullName,
+    email: row.email ?? null,
     role: row.role,
     isActive: row.isActive,
     mustChangePassword: row.mustChangePassword,

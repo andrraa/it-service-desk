@@ -7,6 +7,7 @@ export async function bootstrapAdmin(env: AdminBootstrapEnv, sql: SQL) {
   const username = env.ADMIN_USERNAME?.trim();
   const password = env.ADMIN_PASSWORD;
   const fullName = env.ADMIN_FULL_NAME?.trim() || 'Super Administrator';
+  const email = env.ADMIN_EMAIL?.trim() || null;
 
   if (!username || !password) {
     throw new Error('ADMIN_USERNAME dan ADMIN_PASSWORD wajib disediakan.');
@@ -30,16 +31,18 @@ export async function bootstrapAdmin(env: AdminBootstrapEnv, sql: SQL) {
   const passwordHash = await hashPassword(password);
 
   const inserted = await sql`
-    INSERT INTO users (username, full_name, password_hash, role, is_active, must_change_password)
-    VALUES (${username}, ${fullName}, ${passwordHash}, 'Super Admin', TRUE, FALSE)
-    RETURNING id, username, full_name AS "fullName", role
+    INSERT INTO users (username, full_name, email, password_hash, role, is_active, must_change_password)
+    VALUES (${username}, ${fullName}, ${email}, ${passwordHash}, 'Super Admin', TRUE, FALSE)
+    RETURNING id, username, full_name AS "fullName", email, role
   `;
 
-  const createdUser = inserted[0] as { id: number | string; username: string; fullName: string; role: string };
+  const createdUser = inserted[0] as { id: number | string; username: string; fullName: string; email: string | null; role: string };
   return {
     created: true,
-    message: `Super Admin '${createdUser.username}' berhasil dibuat.`,
-    user: { id: String(createdUser.id), username: createdUser.username, fullName: createdUser.fullName, role: createdUser.role },
+    message: email
+      ? `Super Admin '${createdUser.username}' berhasil dibuat.`
+      : `Super Admin '${createdUser.username}' berhasil dibuat (tanpa email, notifikasi email ke akun ini dilewati).`,
+    user: { id: String(createdUser.id), username: createdUser.username, fullName: createdUser.fullName, email: createdUser.email, role: createdUser.role },
   };
 }
 

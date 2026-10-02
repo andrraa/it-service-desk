@@ -1,6 +1,9 @@
+import { emailFieldError } from './mailer';
+
 export interface CreateITStaffInput {
   username: string;
   fullName: string;
+  email: string;
   temporaryPassword?: string;
 }
 
@@ -17,20 +20,23 @@ export function generateTemporaryPassword(): string {
   return Array.from(bytes, (b) => chars[b % chars.length]).join('');
 }
 
-export function validateCreateITStaffInput(input: unknown): { valid: true; data: { username: string; fullName: string; temporaryPassword: string } } | { valid: false; errors: Record<string, string> } {
+export function validateCreateITStaffInput(input: unknown): { valid: true; data: { username: string; fullName: string; email: string; temporaryPassword: string } } | { valid: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
   if (typeof input !== 'object' || input === null) {
     return { valid: false, errors: { _form: 'Payload tidak valid.' } };
   }
 
-  const { username, fullName, temporaryPassword } = input as Record<string, unknown>;
+  const { username, fullName, email, temporaryPassword } = input as Record<string, unknown>;
 
   if (typeof fullName !== 'string' || fullName.trim() === '') {
     errors.fullName = 'Nama lengkap wajib diisi.';
   } else if (fullName.trim().length < 2 || fullName.trim().length > 128) {
     errors.fullName = 'Nama lengkap harus antara 2 dan 128 karakter.';
   }
+
+  const emailError = emailFieldError(email);
+  if (emailError) errors.email = emailError;
 
   if (typeof username !== 'string' || username.trim() === '') {
     errors.username = 'Username wajib diisi.';
@@ -51,6 +57,7 @@ export function validateCreateITStaffInput(input: unknown): { valid: true; data:
     data: {
       username: (username as string).trim(),
       fullName: (fullName as string).trim(),
+      email: (email as string).trim(),
       temporaryPassword: pass,
     },
   };

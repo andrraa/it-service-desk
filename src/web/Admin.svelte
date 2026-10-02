@@ -16,6 +16,7 @@
   let showCreateModal = $state(false);
   let newFullName = $state('');
   let newUsername = $state('');
+  let newEmail = $state('');
   let createError = $state('');
   let createdTempPassword = $state('');
   let isCreating = $state(false);
@@ -30,6 +31,37 @@
   let resetError = $state('');
   let issuedTempPassword = $state('');
   let isResetting = $state(false);
+
+  // Edit email modal: existing accounts had no address, so notifications skipped them.
+  let emailTargetUser = $state<User | null>(null);
+  let editedEmail = $state('');
+  let emailError = $state('');
+  let isSavingEmail = $state(false);
+
+  async function handleSaveEmail(e: Event) {
+    e.preventDefault();
+    if (!emailTargetUser) return;
+    isSavingEmail = true;
+    emailError = '';
+    try {
+      const res = await fetch(`/api/admin/users/${emailTargetUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify({ email: editedEmail.trim() }),
+      });
+      const data: any = await res.json();
+      if (!res.ok) {
+        emailError = data.error?.details?.email || data.error?.message || 'Gagal menyimpan email.';
+        return;
+      }
+      emailTargetUser = null;
+      await fetchUsers();
+    } catch {
+      emailError = 'Terjadi kesalahan jaringan saat menyimpan email.';
+    } finally {
+      isSavingEmail = false;
+    }
+  }
 
   async function fetchUsers(targetPage = page) {
     isLoading = true;
@@ -69,8 +101,8 @@
 
   async function handleCreateITStaff(e: Event) {
     e.preventDefault();
-    if (!newFullName.trim() || !newUsername.trim()) {
-      createError = 'Nama lengkap dan Username wajib diisi.';
+    if (!newFullName.trim() || !newUsername.trim() || !newEmail.trim()) {
+      createError = 'Nama lengkap, Username, dan Email wajib diisi.';
       return;
     }
 
@@ -85,7 +117,7 @@
           'Content-Type': 'application/json',
           'X-Requested-With': 'fetch',
         },
-        body: JSON.stringify({ fullName: newFullName.trim(), username: newUsername.trim() }),
+        body: JSON.stringify({ fullName: newFullName.trim(), username: newUsername.trim(), email: newEmail.trim() }),
       });
 
       const data: any = await res.json();
@@ -97,6 +129,7 @@
       createdTempPassword = data.temporaryPassword;
       newFullName = '';
       newUsername = '';
+      newEmail = '';
       await fetchUsers();
     } catch {
       createError = 'Terjadi kesalahan jaringan saat membuat akun.';
@@ -185,7 +218,7 @@
 
   <div class="toolbar">
     <form class="search-form" onsubmit={handleSearch}>
-      <input type="search" bind:value={searchQuery} aria-label="Cari pengguna" placeholder="Cari nama atau username…" />
+      <input type="search" bind:value={searchQuery} aria-label="Cari pengguna" placeholder="Cari nama, username, atau email…" />
       <button type="submit" class="btn btn-secondary">Cari</button>
     </form>
     <div class="filter-controls">
@@ -223,6 +256,7 @@
           <tr>
             <th>Nama</th>
             <th>Username</th>
+            <th>Email</th>
             <th>Role</th>
             <th>Status</th>
             <th>Ganti Password</th>
@@ -235,6 +269,19 @@
             <tr>
               <td><strong>{u.fullName || u.username}</strong></td>
               <td class="cell-username">{u.username}</td>
+              <td class="cell-email">
+                {#if u.email}
+                  <span>{u.email}</span>
+                {:else}
+                  <span class="cell-email-missing">Belum ada</span>
+                {/if}
+                <button
+                  type="button"
+                  class="btn-set-email"
+                  aria-label={`${u.email ? 'Ubah' : 'Isi'} email ${u.fullName || u.username}`}
+                  onclick={() => { emailTargetUser = u; editedEmail = u.email || ''; emailError = ''; }}
+                >{u.email ? 'Ubah' : 'Isi'}</button>
+              </td>
               <td>
                 <span class="role-badge role-{u.role.toLowerCase().replace(' ', '-')}">
                   {u.role}
@@ -352,6 +399,11 @@
               <input id="staff-username" type="text" bind:value={newUsername} placeholder="Contoh: budi.it" required disabled={isCreating} />
             </div>
 
+            <div class="form-group">
+              <label for="staff-email">Email <span class="required-mark" aria-hidden="true">*</span></label>
+              <input id="staff-email" type="email" bind:value={newEmail} placeholder="Contoh: budi@perusahaan.com" required disabled={isCreating} />
+            </div>
+
             <div class="modal-actions" style="margin-top: 16px;">
               <button type="submit" class="btn btn-primary" disabled={isCreating}>
                 {isCreating ? 'Menyimpan…' : 'Buat Akun Staf'}
@@ -362,6 +414,54 @@
             </div>
           </form>
         {/if}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal Ubah Email -->
+  {#if emailTargetUser}
+    <div
+      class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-email-title"
+      tabindex="-1"
+      onkeydown={(e) => { if (e.key === 'Escape') emailTargetUser = null; }}
+    >
+      <div class="modal-card">
+        <h3 id="modal-email-title">Email Notifikasi</h3>
+        <p class="modal-sub">
+          Pengguna: <strong>{emailTargetUser.fullName || emailTargetUser.username}</strong> (@{emailTargetUser.username})
+        </p>
+        <p style="margin-top: 12px; font-size: 0.85rem; color: var(--color-text-muted);">
+          Alamat ini menerima notifikasi tiket dan balasan. Email tidak boleh dikosongkan.
+        </p>
+
+        <form onsubmit={handleSaveEmail} class="staff-form" style="margin-top: 14px;">
+          <div class="form-group">
+            <label for="edit-email">Email <span class="required-mark" aria-hidden="true">*</span></label>
+            <input
+              id="edit-email"
+              type="email"
+              bind:value={editedEmail}
+              placeholder="Contoh: budi@perusahaan.com"
+              required
+              disabled={isSavingEmail}
+              aria-invalid={Boolean(emailError)}
+              aria-describedby={emailError ? 'edit-email-error' : undefined}
+            />
+            {#if emailError}
+              <span id="edit-email-error" class="field-error">{emailError}</span>
+            {/if}
+          </div>
+
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button type="submit" class="btn btn-primary" disabled={isSavingEmail}>
+              {isSavingEmail ? 'Menyimpan…' : 'Simpan Email'}
+            </button>
+            <button type="button" class="btn btn-secondary" onclick={() => (emailTargetUser = null)}>Batal</button>
+          </div>
+        </form>
       </div>
     </div>
   {/if}
@@ -574,6 +674,31 @@
 
   .cell-username {
     font-family: monospace;
+  }
+
+  .cell-email {
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .cell-email-missing {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .btn-set-email {
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-surface);
+    color: var(--color-primary);
+    cursor: pointer;
+  }
+
+  .btn-set-email:hover {
+    background-color: var(--color-bg);
   }
 
   .cell-actions {

@@ -18,7 +18,7 @@ const server = Bun.serve({
   fetch: async (request, server) => {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api')) {
-      return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }, { notifier, mailer });
+      return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }, { notifier, mailer, appUrl: config.appUrl });
     }
 
     const distWeb = join(import.meta.dir, '../../dist/web');
@@ -33,7 +33,7 @@ const server = Bun.serve({
       return new Response(indexHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
-    return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }, { notifier, mailer });
+    return handleRequest(request, { sql: db, clientAddress: server.requestIP(request)?.address ?? 'unknown' }, { notifier, mailer, appUrl: config.appUrl });
   },
 });
 console.info(`IT Service Desk API: ${server.url}`);

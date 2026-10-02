@@ -34,7 +34,8 @@ import { MemoryRateLimiter } from './rate-limit';
 import { validateCsrf } from './csrf';
 import { notificationStream, publishNotification } from './notifications';
 import { readTelegramConfig, type TelegramNotifier } from './telegram';
-import { readMailerConfig, validateEmailInput, describeMailError, type Mailer } from './mailer';
+import { readMailerConfig, validateEmailInput, describeMailError, emailFieldError, type Mailer } from './mailer';
+import { sendWelcomeEmail, sendNewTicketEmail, sendTicketReplyEmail } from './email-notifier';
 
 export function readConfig(env: Record<string, string | undefined>) {
   const databaseUrl = env.DATABASE_URL ?? '';
@@ -85,6 +86,8 @@ export interface RequestOptions {
   notifier?: TelegramNotifier;
   /** Optional SMTP mailer; omitted in tests and when SMTP is not configured. */
   mailer?: Mailer;
+  /** Public app URL, used for the "buka tiket" links inside notification emails. */
+  appUrl?: string;
 }
 
 const defaultAuthRateLimiter = new MemoryRateLimiter(5, 60 * 1000);
@@ -111,6 +114,19 @@ async function createMessageNotification(sql: any, ticketId: string, messageId: 
     ON CONFLICT (recipient_id, message_id) DO NOTHING
     RETURNING recipient_id AS "recipientId"
   `;
+}
+
+/** Counterparty's email for the same recipient the notification row was written for. */
+async function messageNotificationEmail(sql: any, ticketId: string, sender: User): Promise<string | null> {
+  const rows = await sql`
+    SELECT CASE WHEN ${sender.role === 'User'} THEN a.email ELSE c.email END AS email
+    FROM tickets t
+    JOIN users c ON c.id = t.creator_id
+    LEFT JOIN users a ON a.id = t.assignee_id
+    WHERE t.id = ${ticketId}
+      AND CASE WHEN ${sender.role === 'User'} THEN a.id ELSE c.id END <> ${sender.id}
+  `;
+  return (rows[0] as { email: string | null } | undefined)?.email ?? null;
 }
 
 export async function handleRequest(request: Request, ctx: AppContext, options: RequestOptions = {}): Promise<Response> {
@@ -206,32 +222,37 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
       return json({ error: { code: 'VALIDATION_ERROR', message: 'Data pendaftaran tidak valid.', details: validation.errors } }, 422);
     }
 
-    const { username, fullName, password } = validation.data;
+    const { username, fullName, email, password } = validation.data;
 
     try {
       const existing = await ctx.sql`
-        SELECT username FROM users
-        WHERE LOWER(username) = LOWER(${username})
+        SELECT username, email FROM users
+        WHERE LOWER(username) = LOWER(${username}) OR LOWER(email) = LOWER(${email})
         LIMIT 1
       `;
 
       if (existing.length > 0) {
-        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: { username: 'Username sudah digunakan.' } } }, 409);
+        const row = existing[0] as { username: string; email: string | null };
+        const taken = row.email !== null && row.email.toLowerCase() === email.toLowerCase()
+          ? { email: 'Email sudah digunakan.' }
+          : { username: 'Username sudah digunakan.' };
+        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: taken } }, 409);
       }
 
       const passwordHash = await hashPassword(password);
 
       const inserted = await ctx.sql`
-        INSERT INTO users (username, full_name, password_hash, role, is_active, must_change_password)
-        VALUES (${username}, ${fullName}, ${passwordHash}, 'User', TRUE, FALSE)
-        RETURNING id, username, full_name AS "fullName", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+        INSERT INTO users (username, full_name, email, password_hash, role, is_active, must_change_password)
+        VALUES (${username}, ${fullName}, ${email}, ${passwordHash}, 'User', TRUE, FALSE)
+        RETURNING id, username, full_name AS "fullName", email, role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
       `;
 
       const newUser = inserted[0];
+      sendWelcomeEmail(options.mailer, { email, fullName, username }, options.appUrl);
       return json({ message: 'Registrasi berhasil.', user: newUser }, 201);
     } catch (err: any) {
       if (err?.code === '23505' || err?.errno === '23505') {
-        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: { _conflict: 'Username sudah digunakan.' } } }, 409);
+        return json({ error: { code: 'CONFLICT', message: 'Data sudah terdaftar.', details: { _conflict: 'Username atau email sudah digunakan.' } } }, 409);
       }
       console.error('Registration error:', err);
       return json({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan sistem.' } }, 500);
@@ -270,7 +291,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
 
     try {
       const rows = await ctx.sql`
-        SELECT id, username, full_name AS "fullName", password_hash AS "passwordHash", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+        SELECT id, username, full_name AS "fullName", email, password_hash AS "passwordHash", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
         FROM users
         WHERE LOWER(username) = LOWER(${username})
         LIMIT 1
@@ -284,6 +305,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         id: number | string;
         username: string;
         fullName?: string;
+        email: string | null;
         passwordHash: string;
         role: 'User' | 'IT Staff' | 'Super Admin';
         isActive: boolean;
@@ -318,6 +340,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
           id: String(user.id),
           username: user.username,
           fullName: user.fullName,
+          email: user.email ?? null,
           role: user.role,
           isActive: user.isActive,
           mustChangePassword: user.mustChangePassword,
@@ -964,7 +987,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
             RETURNING id, ticket_id AS "ticketId", sender_id AS "senderId", message_text AS "messageText", created_at AS "createdAt", (xmax = 0) AS "isNew"
           `;
           const recipients = await createMessageNotification(tx, String(ticket.id), String(inserted[0].id), user);
-          return { inserted, recipients };
+          return { inserted, recipients, recipientEmail: await messageNotificationEmail(tx, String(ticket.id), user) };
         });
         for (const recipient of result.recipients) publishNotification(String(recipient.recipientId));
         const { isNew, ...newMsg } = result.inserted[0] as TicketMessage & { isNew: boolean };
@@ -983,6 +1006,18 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
             senderRole: user.role,
             createdAt: String(newMsg.createdAt),
           }).catch((err) => console.error('Ticket notifier error:', err instanceof Error ? err.name : 'UnknownError'));
+        }
+
+        // Email replies go both ways; Telegram above stays reporter-only. A replayed
+        // requestId (isNew false) must not send a second mail.
+        if (isNew && options.mailer) {
+          sendTicketReplyEmail(options.mailer, result.recipientEmail, {
+            ticketNumber: String(ticket.ticketNumber),
+            title: String(ticket.title),
+            messageText,
+            senderFullName: user.fullName || user.username,
+            senderRole: user.role,
+          }, options.appUrl);
         }
 
         return json({ message: 'Pesan berhasil dikirim.', data: newMsg }, 201);
@@ -1080,7 +1115,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     }
 
     const ticketRows = await ctx.sql`
-      SELECT id, creator_id AS "creatorId", status FROM tickets
+      SELECT id, ticket_number AS "ticketNumber", creator_id AS "creatorId", title, status FROM tickets
       WHERE id::text = ${ticketIdOrNumber} OR ticket_number = ${ticketIdOrNumber}
       LIMIT 1
     `;
@@ -1088,7 +1123,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
       return json({ error: { code: 'NOT_FOUND', message: 'Tiket tidak ditemukan.' } }, 404);
     }
 
-    const ticket = ticketRows[0] as { id: number | string; creatorId: number | string; status: string };
+    const ticket = ticketRows[0] as { id: number | string; ticketNumber: string; creatorId: number | string; title: string; status: string };
 
     if (ticket.status === 'Closed') {
       return json({ error: { code: 'FORBIDDEN', message: 'Tiket telah ditutup. Tidak dapat mengunggah berkas baru.' } }, 403);
@@ -1119,7 +1154,8 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
     const uploadId = requestKey(formData.get('uploadId'));
     const uploadsDir = await ensureUploadsDirExists();
     const savedPaths: string[] = [];
-
+    // Wrapper keeps TS from narrowing this to null across the transaction callback.
+    const pendingReply: { value: { recipientEmail: string | null; messageText: string } | null } = { value: null };
     try {
       let notificationRecipients: Array<{ recipientId: string | number }> = [];
       const insertedRows = await ctx.sql.begin(async (tx) => {
@@ -1145,6 +1181,11 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
             VALUES (${ticket.id}, ${user.id}, ${validation.data.messageText}) RETURNING id`;
           messageId = String(messages[0].id);
           notificationRecipients = await createMessageNotification(tx, String(ticket.id), messageId, user);
+          // Same two-way reply mail as the JSON message route; sent after the commit below.
+          pendingReply.value = {
+            recipientEmail: await messageNotificationEmail(tx, String(ticket.id), user),
+            messageText: validation.data.messageText,
+          };
         }
         const rows = [];
         for (const [index, file] of files.entries()) {
@@ -1167,6 +1208,16 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         return rows;
       });
       for (const recipient of notificationRecipients) publishNotification(String(recipient.recipientId));
+      // Only after the commit: a rolled-back upload must not email anybody.
+      if (pendingReply.value) {
+        sendTicketReplyEmail(options.mailer, pendingReply.value.recipientEmail, {
+          ticketNumber: String(ticket.ticketNumber),
+          title: String(ticket.title),
+          messageText: pendingReply.value.messageText,
+          senderFullName: user.fullName || user.username,
+          senderRole: user.role,
+        }, options.appUrl);
+      }
       return json({ message: 'Berkas berhasil diunggah.', attachments: insertedRows }, 201);
     } catch (err) {
       for (const path of savedPaths) {
@@ -1331,6 +1382,15 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
             creatorUsername: user.username,
             createdAt: newTicket.createdAt,
           }).catch((err) => console.error('Ticket notifier error:', err instanceof Error ? err.name : 'UnknownError'));
+          void sendNewTicketEmail(ctx.sql, options.mailer, {
+            ticketNumber: newTicket.ticketNumber,
+            title: newTicket.title,
+            description: newTicket.description,
+            priority: newTicket.priority,
+            creatorFullName: user.fullName || user.username,
+            creatorUsername: user.username,
+            createdAt: String(newTicket.createdAt),
+          }, options.appUrl).catch((err) => console.error('Email notify error:', err instanceof Error ? err.name : 'UnknownError'));
         }
 
         return json({ message: 'Tiket berhasil dibuat.', ticket: newTicket }, 201);
@@ -1492,12 +1552,12 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         if (role && !['User', 'IT Staff', 'Super Admin'].includes(role)) throw new RequestError(422, 'VALIDATION_ERROR', 'Role tidak valid.');
         if (status && !['active', 'inactive'].includes(status)) throw new RequestError(422, 'VALIDATION_ERROR', 'Status akun tidak valid.');
         const searchPattern = query ? `%${query}%` : null;
-        const filter = ctx.sql`${searchPattern ? ctx.sql`(username ILIKE ${searchPattern} OR full_name ILIKE ${searchPattern})` : ctx.sql`TRUE`}
+        const filter = ctx.sql`${searchPattern ? ctx.sql`(username ILIKE ${searchPattern} OR full_name ILIKE ${searchPattern} OR email ILIKE ${searchPattern})` : ctx.sql`TRUE`}
           AND (${role ? ctx.sql`role = ${role}` : ctx.sql`TRUE`})
           AND (${status ? ctx.sql`is_active = ${status === 'active'}` : ctx.sql`TRUE`})`;
         const rows = await ctx.sql`
           SELECT
-            id, username, full_name AS "fullName", role, is_active AS "isActive",
+            id, username, full_name AS "fullName", email, role, is_active AS "isActive",
             must_change_password AS "mustChangePassword", created_at AS "createdAt"
           FROM users
           WHERE ${filter}
@@ -1529,7 +1589,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         return json({ error: { code: 'VALIDATION_ERROR', message: 'Data staf IT tidak valid.', details: validation.errors } }, 422);
       }
 
-      const { username, fullName, temporaryPassword } = validation.data;
+      const { username, fullName, email, temporaryPassword } = validation.data;
 
       try {
         const existing = await ctx.sql`
@@ -1545,9 +1605,9 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         const passwordHash = await hashPassword(temporaryPassword);
 
         const inserted = await ctx.sql`
-          INSERT INTO users (username, full_name, password_hash, role, is_active, must_change_password)
-          VALUES (${username}, ${fullName}, ${passwordHash}, 'IT Staff', TRUE, TRUE)
-          RETURNING id, username, full_name AS "fullName", role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
+          INSERT INTO users (username, full_name, email, password_hash, role, is_active, must_change_password)
+          VALUES (${username}, ${fullName}, ${email}, ${passwordHash}, 'IT Staff', TRUE, TRUE)
+          RETURNING id, username, full_name AS "fullName", email, role, is_active AS "isActive", must_change_password AS "mustChangePassword", created_at AS "createdAt"
         `;
 
         const newStaff = inserted[0];
@@ -1592,7 +1652,12 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
       return json({ error: { code: 'VALIDATION_ERROR', message: 'Data tidak valid.' } }, 422);
     }
 
-    const { isActive, fullName, username } = body as Record<string, unknown>;
+    const { isActive, fullName, username, email } = body as Record<string, unknown>;
+
+    if (email !== undefined) {
+      const emailError = emailFieldError(email);
+      if (emailError) return json({ error: { code: 'VALIDATION_ERROR', message: emailError, details: { email: emailError } } }, 422);
+    }
 
     try {
       const targetRows = await ctx.sql`SELECT id, username, full_name AS "fullName", role, is_active AS "isActive" FROM users WHERE id = ${targetUserId} LIMIT 1`;
@@ -1633,9 +1698,10 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
           is_active = COALESCE(${typeof isActive === 'boolean' ? isActive : null}, is_active),
           full_name = COALESCE(${typeof fullName === 'string' && fullName.trim() ? fullName.trim() : null}, full_name),
           username = COALESCE(${typeof username === 'string' && username.trim() ? username.trim() : null}, username),
+          email = COALESCE(${typeof email === 'string' && email.trim() ? email.trim() : null}, email),
           updated_at = NOW()
         WHERE id = ${targetUser.id}
-        RETURNING id, username, full_name AS "fullName", role, is_active AS "isActive", must_change_password AS "mustChangePassword"
+        RETURNING id, username, full_name AS "fullName", email, role, is_active AS "isActive", must_change_password AS "mustChangePassword"
       `;
 
       // Jika dinonaktifkan: Acceptance — cabut seluruh sesi aktifnya

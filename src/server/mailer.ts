@@ -12,7 +12,9 @@ export interface MailerConfig {
 }
 
 export interface OutboundEmail {
-  to: string;
+  /** Omit when every recipient is in bcc (staff broadcast). */
+  to?: string;
+  bcc?: string[];
   subject: string;
   body: string;
 }
@@ -28,6 +30,19 @@ const MAX_BODY = 5000;
 const ADDRESS = /^[^\s@,;:<>"]+@[^\s@,;:<>"]+\.[a-z]{2,}$/i;
 // CR/LF in a header lets a caller inject extra SMTP headers (e.g. Bcc).
 const HEADER_BREAK = /[\r\n]/;
+
+/** Shared address check: also used to validate the email typed at registration. */
+export function isEmailAddress(value: string): boolean {
+  return !HEADER_BREAK.test(value) && ADDRESS.test(value);
+}
+
+/** One wording for "email missing / email malformed", shared by registration and admin forms. */
+export function emailFieldError(value: unknown): string | null {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return 'Email wajib diisi.';
+  if (text.length > 254 || !isEmailAddress(text)) return 'Format email tidak valid.';
+  return null;
+}
 
 /**
  * Reads SMTP settings. Returns null when SMTP_HOST is empty (feature off, like Telegram);
@@ -72,7 +87,7 @@ export function readMailerConfig(env: Record<string, string | undefined>): Maile
   return { host, port, secure, user, password, from, tlsInsecure: insecureRaw === 'true' || insecureRaw === '1' };
 }
 
-export function validateEmailInput(input: unknown): { valid: true; data: OutboundEmail } | { valid: false; errors: Record<string, string> } {
+export function validateEmailInput(input: unknown): { valid: true; data: { to: string; subject: string; body: string } } | { valid: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   if (typeof input !== 'object' || input === null) {
     return { valid: false, errors: { _form: 'Payload tidak valid.' } };
@@ -82,7 +97,7 @@ export function validateEmailInput(input: unknown): { valid: true; data: Outboun
   const toText = typeof to === 'string' ? to.trim() : '';
   if (!toText) {
     errors.to = 'Alamat email tujuan wajib diisi.';
-  } else if (HEADER_BREAK.test(toText) || !ADDRESS.test(toText)) {
+  } else if (!isEmailAddress(toText)) {
     errors.to = 'Format alamat email tujuan tidak valid.';
   }
 
@@ -128,6 +143,7 @@ export function createMailer(config: MailerConfig, options: { transport?: Transp
       await transport.sendMail({
         from: config.from,
         to: email.to,
+        bcc: email.bcc,
         subject: email.subject,
         text: email.body,
       });
