@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { handleRequest } from '../src/server/app';
 import type { SQL } from 'bun';
+import { PRIORITY_ORDER, priorityRank, validateCreateTicketInput } from '../src/server/tickets';
 
 function createMockSql(impl: (query: string, ...args: any[]) => any): SQL {
   const sqlMock = (async (strings: TemplateStringsArray, ...values: any[]) => {
@@ -153,5 +154,22 @@ describe('Ticket Endpoints (/api/tickets)', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ticket.ticketNumber).toBe('TKT-000002');
+  });
+});
+
+describe('TicketPriority', () => {
+  test('offers Request as the least urgent level, below Low', () => {
+    expect(PRIORITY_ORDER).toEqual(['Critical', 'High', 'Medium', 'Low', 'Request']);
+    expect(priorityRank('Critical')).toBeLessThan(priorityRank('High'));
+    expect(priorityRank('Low')).toBeLessThan(priorityRank('Request'));
+    // An unknown priority sorts after every known one instead of silently matching Critical.
+    expect(priorityRank('Nonsense')).toBeGreaterThan(priorityRank('Request'));
+  });
+
+  test('accepts Request and rejects anything else', () => {
+    const base = { title: 'Permintaan akun baru', description: 'Mohon dibuatkan akun untuk staf baru.' };
+    expect(validateCreateTicketInput({ ...base, priority: 'Request' }).valid).toBe(true);
+    expect(validateCreateTicketInput({ ...base, priority: 'request' }).valid).toBe(false);
+    expect(validateCreateTicketInput({ ...base, priority: 'Urgent' }).valid).toBe(false);
   });
 });

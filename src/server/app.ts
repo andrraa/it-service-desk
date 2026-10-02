@@ -17,6 +17,8 @@ import {
   validateUpdatePriorityInput,
   validateCloseTicketInput,
   formatTicketNumber,
+  PRIORITY_ORDER,
+  type TicketPriority,
   type Ticket,
 } from './tickets';
 import { validateMessageInput, type TicketMessage } from './messages';
@@ -634,10 +636,11 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
             WHEN 'High' THEN 2 
             WHEN 'Medium' THEN 3 
             WHEN 'Low' THEN 4 
-            ELSE 5 
+            WHEN 'Request' THEN 5 
+            ELSE 6 
           END ASC,
-          t.created_at ASC,
-          t.id ASC
+          t.created_at DESC,
+          t.id DESC
         LIMIT ${limit + 1} OFFSET ${(Math.floor(page) - 1) * limit}
       `;
       const assignees = await ctx.sql`SELECT id, username FROM users WHERE role IN ('IT Staff', 'Super Admin') ORDER BY username`;
@@ -1415,7 +1418,7 @@ async function routeRequest(request: Request, ctx: AppContext, options: RequestO
         const status = url.searchParams.get('status');
         if (status && !['Open', 'In Progress', 'Closed'].includes(status)) throw new RequestError(422, 'VALIDATION_ERROR', 'Status tidak valid.');
         const priority = url.searchParams.get('priority');
-        if (priority && !['Low', 'Medium', 'High', 'Critical'].includes(priority)) throw new RequestError(422, 'VALIDATION_ERROR', 'Prioritas tidak valid.');
+        if (priority && !PRIORITY_ORDER.includes(priority as TicketPriority)) throw new RequestError(422, 'VALIDATION_ERROR', 'Prioritas tidak valid.');
         const scope = user.role === 'User' || url.searchParams.get('mine') === 'true'
           ? ctx.sql`t.creator_id = ${user.id}` : ctx.sql`TRUE`;
         const filter = ctx.sql`${scope}

@@ -67,7 +67,7 @@ describe('Dashboard & Claim Integration Tests (Live PostgreSQL)', () => {
     expect(queueRes.status).toBe(403);
   });
 
-  test('acceptance: queue orders Critical -> High -> Medium -> Low, then newest first, then ID', async () => {
+  test('acceptance: queue orders Critical -> High -> Medium -> Low -> Request, then newest first', async () => {
     // Insert tickets in reverse priority order
     await sql`
       INSERT INTO tickets (ticket_number, creator_id, title, description, priority, status, created_at)
@@ -76,7 +76,8 @@ describe('Dashboard & Claim Integration Tests (Live PostgreSQL)', () => {
         ('DASH-MED-1', (SELECT id FROM users WHERE username = 'dash_test_user'), 'DASH_Med_1', 'Desc', 'Medium', 'Open', NOW() - INTERVAL '5 minutes'),
         ('DASH-HIGH-1', (SELECT id FROM users WHERE username = 'dash_test_user'), 'DASH_High_1', 'Desc', 'High', 'Open', NOW() - INTERVAL '3 minutes'),
         ('DASH-CRIT-1', (SELECT id FROM users WHERE username = 'dash_test_user'), 'DASH_Crit_1', 'Desc', 'Critical', 'Open', NOW() - INTERVAL '1 minute'),
-        ('DASH-MED-2', (SELECT id FROM users WHERE username = 'dash_test_user'), 'DASH_Med_2', 'Desc', 'Medium', 'Open', NOW() - INTERVAL '1 minute')
+        ('DASH-MED-2', (SELECT id FROM users WHERE username = 'dash_test_user'), 'DASH_Med_2', 'Desc', 'Medium', 'Open', NOW() - INTERVAL '1 minute'),
+        ('DASH-REQ-1', (SELECT id FROM users WHERE username = 'dash_test_user'), 'DASH_Req_1', 'Desc', 'Request', 'Open', NOW())
     `;
 
     const res = await handleRequest(new Request('http://localhost/api/dashboard/queue', {
@@ -88,8 +89,9 @@ describe('Dashboard & Claim Integration Tests (Live PostgreSQL)', () => {
     const body = await res.json();
     const titles = body.queue.filter((t: any) => t.title.startsWith('DASH_')).map((t: any) => t.title);
 
-    // Priority first, then the freshest Medium (Med_2 was created after Med_1).
-    expect(titles).toEqual(['DASH_Crit_1', 'DASH_High_1', 'DASH_Med_2', 'DASH_Med_1', 'DASH_Low_1']);
+    // Priority first, then the freshest Medium (Med_2 was created after Med_1); Request is last
+    // even though it is the newest ticket.
+    expect(titles).toEqual(['DASH_Crit_1', 'DASH_High_1', 'DASH_Med_2', 'DASH_Med_1', 'DASH_Low_1', 'DASH_Req_1']);
   });
 
   test('acceptance: race condition claim — when two IT staff claim the same Open ticket, exactly one succeeds', async () => {

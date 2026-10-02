@@ -1,5 +1,15 @@
-export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+export type TicketPriority = 'Request' | 'Low' | 'Medium' | 'High' | 'Critical';
 export type TicketStatus = 'Open' | 'In Progress' | 'Closed';
+
+/** Most urgent first; this order is also the IT queue order. */
+export const PRIORITY_ORDER: TicketPriority[] = ['Critical', 'High', 'Medium', 'Low', 'Request'];
+
+/** Rank used by the queue ORDER BY: 1 = Critical … 5 = Request. */
+const PRIORITY_RANK = new Map(PRIORITY_ORDER.map((priority, index) => [priority, index + 1]));
+
+export function priorityRank(priority: string): number {
+  return PRIORITY_RANK.get(priority as TicketPriority) ?? PRIORITY_ORDER.length + 1;
+}
 
 export interface Ticket {
   id: string;
@@ -57,9 +67,8 @@ export function validateCreateTicketInput(input: unknown): { valid: true; data: 
     errors.description = 'Deskripsi kendala minimal 10 karakter.';
   }
 
-  const allowedPriorities: TicketPriority[] = ['Low', 'Medium', 'High', 'Critical'];
-  if (typeof priority !== 'string' || !allowedPriorities.includes(priority as TicketPriority)) {
-    errors.priority = 'Prioritas harus salah satu dari: Low, Medium, High, Critical.';
+  if (typeof priority !== 'string' || !PRIORITY_ORDER.includes(priority as TicketPriority)) {
+    errors.priority = `Prioritas harus salah satu dari: ${PRIORITY_ORDER.join(', ')}.`;
   }
 
   if (Object.keys(errors).length > 0) {
@@ -85,9 +94,8 @@ export function validateUpdatePriorityInput(input: unknown): { valid: true; data
 
   const { priority, reason } = input as Record<string, unknown>;
 
-  const allowedPriorities: TicketPriority[] = ['Low', 'Medium', 'High', 'Critical'];
-  if (typeof priority !== 'string' || !allowedPriorities.includes(priority as TicketPriority)) {
-    errors.priority = 'Prioritas harus salah satu dari: Low, Medium, High, Critical.';
+  if (typeof priority !== 'string' || !PRIORITY_ORDER.includes(priority as TicketPriority)) {
+    errors.priority = `Prioritas harus salah satu dari: ${PRIORITY_ORDER.join(', ')}.`;
   }
 
   if (typeof reason !== 'string' || reason.trim().length < 5) {

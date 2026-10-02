@@ -379,6 +379,7 @@
             <option value="High">High: Pekerjaan utama terhambat</option>
             <option value="Medium">Medium: Kendala mengganggu, ada alternatif</option>
             <option value="Low">Low: Gangguan ringan / tidak mendesak</option>
+            <option value="Request">Request: Permintaan layanan, bukan gangguan</option>
           </select>
         </div>
 

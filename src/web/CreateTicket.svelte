@@ -244,7 +244,7 @@
 
   <form onsubmit={handleSubmit} novalidate class="ticket-form">
     <div class="form-group">
-      <label for="ticket-title">Judul Kendala <span class="required-mark" aria-hidden="true">*</span></label>
+      <label for="ticket-title">Judul <span class="required-mark" aria-hidden="true">*</span></label>
       <input
         id="ticket-title"
         type="text"
@@ -268,6 +268,7 @@
         bind:value={priority}
         disabled={isSubmitting || Boolean(createdTicket)}
       >
+        <option value="Request">Request: Permintaan layanan, bukan gangguan</option>
         <option value="Low">Low: Gangguan ringan / tidak mendesak</option>
         <option value="Medium">Medium: Kendala mengganggu, ada alternatif</option>
         <option value="High">High: Pekerjaan utama terhambat</option>

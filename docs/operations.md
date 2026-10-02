@@ -119,7 +119,7 @@ Balasan staf IT hanya tampil di percakapan aplikasi, tidak di Telegram. Contoh p
 🔗 Buka tiket TKT-000123
 ```
 
-- Ikon prioritas: 🔴 Critical, 🟠 High, 🟡 Medium, 🟢 Low.
+- Ikon prioritas: 🔴 Critical, 🟠 High, 🟡 Medium, 🟢 Low, 🔵 Request.
 - Judul dipotong 120 karakter, deskripsi 300 karakter; semua teks di-escape HTML agar judul bertanda `<` `&` tidak membatalkan pengiriman.
 - Pengiriman bersifat *fire-and-forget*: respons API (buat tiket, kirim pesan, tutup tiket) tidak menunggu Telegram. Gagal jaringan/HTTP 5xx/429 dicoba maksimal 3 kali (250 ms → 1 s) lalu dicatat di log; HTTP 4xx tidak diulang.
 - Pengiriman per chat diserialkan agar urutan pesan tetap terjaga, dan saat server shutdown antrean yang masih berjalan diselesaikan sebelum proses keluar.

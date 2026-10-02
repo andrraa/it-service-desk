@@ -159,7 +159,7 @@ Akun yang dinonaktifkan tidak dapat login.
 |---|---|---|
 | Judul | Ya | Ringkasan masalah |
 | Deskripsi | Ya | Detail kendala dan dampaknya |
-| Prioritas | Ya | Low, Medium, High, Critical |
+| Prioritas | Ya | Request, Low, Medium, High, Critical |
 | Lampiran | Tidak | Gambar atau dokumen pendukung |
 
 Data otomatis:
@@ -182,11 +182,12 @@ Nomor harus tetap unik saat banyak tiket dibuat bersamaan. Nomor yang terlewati 
 | High | Pekerjaan utama terhambat tanpa alternatif memadai |
 | Medium | Kendala mengganggu, tetapi masih ada alternatif |
 | Low | Gangguan ringan atau permintaan tidak mendesak |
+| Request | Permintaan layanan (bukan gangguan), mis. akun baru atau pemasangan perangkat |
 
 Aturan antrean default:
 
 1. Hanya tiket aktif: Open dan In Progress.
-2. Urutan prioritas: **Critical → High → Medium → Low**.
+2. Urutan prioritas: **Critical → High → Medium → Low → Request**.
 3. Dalam prioritas yang sama, tiket yang **paling baru dibuat** muncul lebih dahulu.
 4. Jika waktu sama, ID tiket menjadi penentu urutan yang konsisten.
 5. Balasan baru tidak mengubah posisi antrean.

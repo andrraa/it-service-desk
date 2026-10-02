@@ -335,6 +335,7 @@ label {
 }
 
 .priority-low,
+.priority-request,
 .status-open,
 .badge-neutral {
   background-color: var(--color-neutral-bg);

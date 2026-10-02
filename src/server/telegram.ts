@@ -37,6 +37,7 @@ const PRIORITY_ICONS: Record<string, string> = {
   High: '🟠',
   Medium: '🟡',
   Low: '🟢',
+  Request: '🔵',
 };
 
 const TELEGRAM_API = 'https://api.telegram.org';
